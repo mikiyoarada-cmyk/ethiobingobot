@@ -1,82 +1,81 @@
 from flask import Flask, request
 import requests
 import os
+import random
 
 app = Flask(__name__)
 
-# =============================
-# CONFIG (PUT YOUR TOKENS HERE)
-# =============================
-BOT_TOKEN = os.getenv("BOT_TOKEN")  # Telegram bot token
-TWILIO_SID = os.getenv("TWILIO_SID")
-TWILIO_AUTH = os.getenv("TWILIO_AUTH")
-TWILIO_NUMBER = os.getenv("TWILIO_NUMBER")
+# ================== CONFIG ==================
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+TWILIO_SID = os.environ.get("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH = os.environ.get("TWILIO_AUTH_TOKEN")
+TWILIO_PHONE = os.environ.get("TWILIO_PHONE_NUMBER")
 
-# =============================
-# TELEGRAM SEND FUNCTION
-# =============================
+TELEGRAM_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+
+# Store OTP temporarily
+otp_storage = {}
+
+# ================== TELEGRAM SEND ==================
 def send_message(chat_id, text):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    data = {
+    requests.post(TELEGRAM_URL, json={
         "chat_id": chat_id,
         "text": text
-    }
-    requests.post(url, json=data)
+    })
 
-# =============================
-# WEBHOOK ROUTE
-# =============================
-@app.route(f"/{BOT_TOKEN}", methods=["POST"])
-def webhook():
-    data = request.get_json()
+# ================== SEND OTP ==================
+def send_otp(phone):
+    otp = str(random.randint(1000, 9999))
+    otp_storage[phone] = otp
 
-    if "message" in data:
-        chat_id = data["message"]["chat"]["id"]
-        text = data["message"].get("text", "")
-
-        # COMMANDS
-        if text == "/start":
-            send_message(chat_id, "Bot is working ✅")
-
-        elif text == "/balance":
-            send_message(chat_id, "Your balance is 100 ETB 💰")
-
-        elif text.startswith("/sms"):
-            try:
-                number = text.split(" ")[1]
-                send_sms(number, "Hello from your bot 📲")
-                send_message(chat_id, "SMS sent ✅")
-            except:
-                send_message(chat_id, "Use like: /sms 0912345678")
-
-        else:
-            send_message(chat_id, "Unknown command ❌")
-
-    return "ok"
-
-# =============================
-# TWILIO SMS FUNCTION
-# =============================
-def send_sms(to, message):
     url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_SID}/Messages.json"
 
     data = {
-        "From": TWILIO_NUMBER,
-        "To": to,
-        "Body": message
+        "From": TWILIO_PHONE,
+        "To": phone,
+        "Body": f"Your OTP is {otp}"
     }
 
     requests.post(url, data=data, auth=(TWILIO_SID, TWILIO_AUTH))
 
-# =============================
-# ROOT ROUTE (IMPORTANT)
-# =============================
+    return otp
+
+# ================== WEBHOOK ==================
+@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+def webhook():
+    data = request.get_json()
+
+    if data and "message" in data:
+        chat_id = data["message"]["chat"]["id"]
+        text = data["message"].get("text", "")
+
+        # START COMMAND
+        if text == "/start":
+            send_message(chat_id, "Welcome!\nSend your phone number like:\n+2519XXXXXXXX")
+
+        # PHONE NUMBER → SEND OTP
+        elif text.startswith("+"):
+            send_otp(text)
+            send_message(chat_id, "OTP sent to your phone. Now send OTP code.")
+
+        # OTP CHECK
+        elif text.isdigit():
+            found = False
+            for phone, code in otp_storage.items():
+                if text == code:
+                    send_message(chat_id, "✅ OTP Verified! You can now play.")
+                    found = True
+                    break
+
+            if not found:
+                send_message(chat_id, "❌ Wrong OTP. Try again.")
+
+        else:
+            send_message(chat_id, "Send /start to begin")
+
+    return "ok", 200
+
+# ================== HOME ==================
 @app.route("/")
 def home():
-    return "Bot is running! 🚀"
-
-# =============================
-# RUN APP
-# =============================
-if __name__ == "__main__":
-    app.run()
+    return "Bot is running!"
