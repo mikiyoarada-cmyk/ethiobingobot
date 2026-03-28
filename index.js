@@ -8,20 +8,20 @@ app.use(bodyParser.json());
 const TOKEN = process.env.TOKEN;
 const URL = `https://api.telegram.org/bot${TOKEN}`;
 
-// Test route
+// Home
 app.get("/", (req, res) => {
-  res.send("Bot is running!");
+  res.send("Bingo Bot Running!");
 });
 
-// Webhook test
+// Webhook check
 app.get(`/${TOKEN}`, (req, res) => {
-  res.send("Webhook is working!");
+  res.send("Webhook OK");
 });
 
 // Telegram webhook
 app.post(`/${TOKEN}`, async (req, res) => {
   try {
-    console.log("UPDATE:", req.body);
+    console.log(req.body);
 
     const message = req.body.message;
     if (!message) return res.sendStatus(200);
@@ -29,32 +29,38 @@ app.post(`/${TOKEN}`, async (req, res) => {
     const chatId = message.chat.id;
     const text = (message.text || "").trim();
 
-    // ✅ COMMANDS
-    if (text.startsWith("/start")) {
+    // 🎮 START
+    if (text === "/start") {
       await axios.post(`${URL}/sendMessage`, {
         chat_id: chatId,
-        text: "👋 Welcome to Ethiopian Bingo Bot!",
+        text: "🎰 Welcome to Bingo Bot!\nType /play to play.",
       });
     }
 
-    else if (text.startsWith("/balance")) {
+    // 🎰 PLAY GAME
+    else if (text === "/play") {
+      const userNumber = Math.floor(Math.random() * 10) + 1;
+      const botNumber = Math.floor(Math.random() * 10) + 1;
+
+      let result = `🎲 Your number: ${userNumber}\n🤖 Bot number: ${botNumber}\n\n`;
+
+      if (userNumber === botNumber) {
+        result += "🎉 YOU WIN!";
+      } else {
+        result += "❌ You lost. Try again!";
+      }
+
       await axios.post(`${URL}/sendMessage`, {
         chat_id: chatId,
-        text: "💰 Your balance is 0 birr",
+        text: result,
       });
     }
 
-    else if (text.startsWith("/invite")) {
+    // HELP
+    else if (text === "/help") {
       await axios.post(`${URL}/sendMessage`, {
         chat_id: chatId,
-        text: "📨 Invite friends and earn rewards!",
-      });
-    }
-
-    else if (text.startsWith("/help")) {
-      await axios.post(`${URL}/sendMessage`, {
-        chat_id: chatId,
-        text: "📖 Commands:\n/start\n/balance\n/invite\n/help",
+        text: "Commands:\n/start\n/play\n/help",
       });
     }
 
@@ -66,11 +72,11 @@ app.post(`/${TOKEN}`, async (req, res) => {
     }
 
     res.sendStatus(200);
-  } catch (error) {
-    console.error(error);
+  } catch (err) {
+    console.error(err);
     res.sendStatus(200);
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Server started"));
+app.listen(PORT, () => console.log("Server running"));
