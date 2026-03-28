@@ -8,66 +8,77 @@ app.use(bodyParser.json());
 const TOKEN = process.env.TOKEN;
 const URL = `https://api.telegram.org/bot${TOKEN}`;
 
-// Home
+// ===== GAME DATA =====
+let players = [];
+let numbersCalled = [];
+let gameRunning = false;
+
+// ===== HOME =====
 app.get("/", (req, res) => {
-  res.send("Bingo Bot Running!");
+  res.send("Multiplayer Bingo Running!");
 });
 
-// Webhook check
-app.get(`/${TOKEN}`, (req, res) => {
-  res.send("Webhook OK");
-});
-
-// Telegram webhook
 app.post(`/${TOKEN}`, async (req, res) => {
   try {
-    console.log(req.body);
-
     const message = req.body.message;
     if (!message) return res.sendStatus(200);
 
     const chatId = message.chat.id;
     const text = (message.text || "").trim();
 
-    // 🎮 START
+    // START
     if (text === "/start") {
       await axios.post(`${URL}/sendMessage`, {
         chat_id: chatId,
-        text: "🎰 Welcome to Bingo Bot!\nType /play to play.",
+        text: "🎰 Multiplayer Bingo!\nCommands:\n/join\n/startgame\n/help",
       });
     }
 
-    // 🎰 PLAY GAME
-    else if (text === "/play") {
-      const userNumber = Math.floor(Math.random() * 10) + 1;
-      const botNumber = Math.floor(Math.random() * 10) + 1;
-
-      let result = `🎲 Your number: ${userNumber}\n🤖 Bot number: ${botNumber}\n\n`;
-
-      if (userNumber === botNumber) {
-        result += "🎉 YOU WIN!";
+    // JOIN GAME
+    else if (text === "/join") {
+      if (players.includes(chatId)) {
+        await axios.post(`${URL}/sendMessage`, {
+          chat_id: chatId,
+          text: "✅ You already joined!",
+        });
       } else {
-        result += "❌ You lost. Try again!";
+        players.push(chatId);
+        await axios.post(`${URL}/sendMessage`, {
+          chat_id: chatId,
+          text: "🎟 You joined the bingo game!",
+        });
+      }
+    }
+
+    // START GAME (ADMIN = first player)
+    else if (text === "/startgame") {
+      if (players.length < 2) {
+        return await axios.post(`${URL}/sendMessage`, {
+          chat_id: chatId,
+          text: "❌ Need at least 2 players!",
+        });
       }
 
-      await axios.post(`${URL}/sendMessage`, {
-        chat_id: chatId,
-        text: result,
-      });
+      gameRunning = true;
+      numbersCalled = [];
+
+      // send start message
+      for (let p of players) {
+        await axios.post(`${URL}/sendMessage`, {
+          chat_id: p,
+          text: "🚀 Game started! Numbers coming...",
+        });
+      }
+
+      // start calling numbers
+      callNumbers();
     }
 
     // HELP
     else if (text === "/help") {
       await axios.post(`${URL}/sendMessage`, {
         chat_id: chatId,
-        text: "Commands:\n/start\n/play\n/help",
-      });
-    }
-
-    else {
-      await axios.post(`${URL}/sendMessage`, {
-        chat_id: chatId,
-        text: "❓ Unknown command. Type /help",
+        text: "/join - join game\n/startgame - start\n/help",
       });
     }
 
@@ -77,6 +88,32 @@ app.post(`/${TOKEN}`, async (req, res) => {
     res.sendStatus(200);
   }
 });
+
+// ===== NUMBER CALLING FUNCTION =====
+async function callNumbers() {
+  let interval = setInterval(async () => {
+    if (!gameRunning) return clearInterval(interval);
+
+    if (numbersCalled.length >= 20) {
+      gameRunning = false;
+      return;
+    }
+
+    let num;
+    do {
+      num = Math.floor(Math.random() * 20) + 1;
+    } while (numbersCalled.includes(num));
+
+    numbersCalled.push(num);
+
+    for (let p of players) {
+      await axios.post(`${URL}/sendMessage`, {
+        chat_id: p,
+        text: `📢 Number: ${num}`,
+      });
+    }
+  }, 5000); // every 5 sec
+}
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("Server running"));
