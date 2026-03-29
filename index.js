@@ -6,16 +6,18 @@ const app = express();
 app.use(bodyParser.json());
 
 const TOKEN = process.env.TOKEN;
+const ADMIN_ID = process.env.ADMIN_ID; // put your telegram ID in Render
 const URL = `https://api.telegram.org/bot${TOKEN}`;
 
 // ===== GAME DATA =====
 let players = {};
+let balances = {};
 let numbersCalled = [];
 let gameRunning = false;
 
 // ===== HOME =====
 app.get("/", (req, res) => {
-  res.send("Bingo Winner System Running!");
+  res.send("Bingo + Balance Running!");
 });
 
 app.post(`/${TOKEN}`, async (req, res) => {
@@ -26,11 +28,22 @@ app.post(`/${TOKEN}`, async (req, res) => {
     const chatId = message.chat.id;
     const text = (message.text || "").trim();
 
+    // create balance if not exist
+    if (!balances[chatId]) balances[chatId] = 0;
+
     // START
     if (text === "/start") {
       await axios.post(`${URL}/sendMessage`, {
         chat_id: chatId,
-        text: "🎰 Bingo Game!\n/join\n/startgame\n/mycard\n/help",
+        text: "🎰 Bingo Game!\n/join\n/startgame\n/balance\n/help",
+      });
+    }
+
+    // BALANCE
+    else if (text === "/balance") {
+      await axios.post(`${URL}/sendMessage`, {
+        chat_id: chatId,
+        text: `💰 Your balance: ${balances[chatId]}`,
       });
     }
 
@@ -43,36 +56,27 @@ app.post(`/${TOKEN}`, async (req, res) => {
         });
       }
 
-      // generate 5 random numbers
+      // 🎟 OPTIONAL: cost to join
+      if (balances[chatId] < 5) {
+        return await axios.post(`${URL}/sendMessage`, {
+          chat_id: chatId,
+          text: "❌ Need 5 birr to join",
+        });
+      }
+
+      balances[chatId] -= 5;
+
       let card = [];
       while (card.length < 5) {
         let num = Math.floor(Math.random() * 20) + 1;
         if (!card.includes(num)) card.push(num);
       }
 
-      players[chatId] = {
-        card: card,
-        matched: []
-      };
+      players[chatId] = { card, matched: [] };
 
       await axios.post(`${URL}/sendMessage`, {
         chat_id: chatId,
         text: `🎟 Your card:\n${card.join(", ")}`,
-      });
-    }
-
-    // SHOW CARD
-    else if (text === "/mycard") {
-      if (!players[chatId]) {
-        return await axios.post(`${URL}/sendMessage`, {
-          chat_id: chatId,
-          text: "❌ Join first with /join",
-        });
-      }
-
-      await axios.post(`${URL}/sendMessage`, {
-        chat_id: chatId,
-        text: `🎟 Your card:\n${players[chatId].card.join(", ")}\n✅ Matched: ${players[chatId].matched.join(", ")}`,
       });
     }
 
@@ -98,11 +102,25 @@ app.post(`/${TOKEN}`, async (req, res) => {
       callNumbers();
     }
 
-    // HELP
+    // ADMIN ADD MONEY
+    else if (text.startsWith("/add") && chatId == ADMIN_ID) {
+      const parts = text.split(" ");
+      const userId = parts[1];
+      const amount = parseInt(parts[2]);
+
+      if (!balances[userId]) balances[userId] = 0;
+      balances[userId] += amount;
+
+      await axios.post(`${URL}/sendMessage`, {
+        chat_id: chatId,
+        text: "✅ Money added",
+      });
+    }
+
     else if (text === "/help") {
       await axios.post(`${URL}/sendMessage`, {
         chat_id: chatId,
-        text: "/join\n/startgame\n/mycard\n/help",
+        text: "/join\n/startgame\n/balance\n/help",
       });
     }
 
@@ -113,7 +131,7 @@ app.post(`/${TOKEN}`, async (req, res) => {
   }
 });
 
-// ===== NUMBER CALLING =====
+// ===== GAME LOGIC =====
 async function callNumbers() {
   let interval = setInterval(async () => {
     if (!gameRunning) return clearInterval(interval);
@@ -137,19 +155,21 @@ async function callNumbers() {
         text: `📢 Number: ${num}`,
       });
 
-      // 🎉 CHECK WIN
+      // WINNER
       if (player.matched.length === player.card.length) {
         gameRunning = false;
 
-        // announce winner
+        // 💰 GIVE REWARD
+        balances[p] += 20;
+
         for (let all in players) {
           await axios.post(`${URL}/sendMessage`, {
             chat_id: all,
-            text: `🏆 WINNER: ${p}`,
+            text: `🏆 WINNER: ${p}\n💰 Won 20 birr!`,
           });
         }
 
-        players = {}; // reset game
+        players = {};
         return;
       }
     }
