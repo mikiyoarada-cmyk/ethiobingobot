@@ -10,11 +10,11 @@ const TOKEN = process.env.TOKEN;
 const ADMIN_ID = process.env.ADMIN_ID;
 const URL = `https://api.telegram.org/bot${TOKEN}`;
 
-// ===== DATABASE =====
+// ===== DATA =====
 let users = {};
 let players = {};
-let withdrawRequests = {};
-let depositRequests = {};
+let cards = {};
+let calledNumbers = [];
 
 function loadUsers() {
   if (fs.existsSync("users.json")) {
@@ -34,13 +34,55 @@ function mainMenu(chatId) {
     reply_markup: {
       keyboard: [
         ["🎮 Join Game", "💰 Balance"],
-        ["💳 Deposit", "💸 Withdraw"],
-        ["👥 Invite", "🏆 Leaderboard"],
-        ["📢 Announcements", "❓ Help"]
+        ["🏆 Leaderboard", "❓ Help"]
       ],
       resize_keyboard: true
     }
   });
+}
+
+// ===== CREATE CARD =====
+function generateCard() {
+  let nums = [];
+  while (nums.length < 25) {
+    let n = Math.floor(Math.random() * 75) + 1;
+    if (!nums.includes(n)) nums.push(n);
+  }
+
+  let grid = [];
+  for (let i = 0; i < 5; i++) {
+    grid.push(nums.slice(i * 5, i * 5 + 5));
+  }
+
+  return grid;
+}
+
+// ===== FORMAT CARD =====
+function formatCard(card, called) {
+  let text = "🎯 Your Bingo Card:\n\n";
+
+  for (let row of card) {
+    let line = row.map(n => (called.includes(n) ? "✅" : n)).join("  ");
+    text += line + "\n";
+  }
+
+  return text;
+}
+
+// ===== CHECK WIN =====
+function checkWin(card, called) {
+  // rows
+  for (let row of card) {
+    if (row.every(n => called.includes(n))) return true;
+  }
+
+  // columns
+  for (let i = 0; i < 5; i++) {
+    let col = card.map(r => r[i]);
+    if (col.every(n => called.includes(n))) return true;
+  }
+
+  return false;
 }
 
 // ===== HOME =====
@@ -60,164 +102,39 @@ app.post(`/${TOKEN}`, async (req, res) => {
     const username = message.from.username;
     const firstName = message.from.first_name;
 
-    // BUTTONS
-    if (text === "🎮 Join Game") text = "/join";
-    else if (text === "💰 Balance") text = "/balance";
-    else if (text === "💳 Deposit") text = "/deposit 10";
-    else if (text === "💸 Withdraw") text = "/withdraw 10";
-    else if (text === "👥 Invite") text = "/invite";
-    else if (text === "🏆 Leaderboard") text = "/leaderboard";
-    else if (text === "📢 Announcements") text = "/ann";
-    else if (text === "❓ Help") text = "/help";
-
-    // CREATE USER
     if (!users[chatId]) {
       users[chatId] = {
         balance: 0,
         name: firstName,
-        username: username,
-        invitedBy: null
+        username: username
       };
-    } else {
-      users[chatId].name = firstName;
-      users[chatId].username = username;
     }
-    saveUsers();
 
-    // ===== COMMANDS =====
-
+    // ===== START =====
     if (text.startsWith("/start")) {
-      const parts = text.split(" ");
-      const referrerId = parts[1];
-
-      if (referrerId && referrerId !== chatId.toString() && users[referrerId]) {
-        if (!users[chatId].invitedBy) {
-          users[referrerId].balance += 5;
-          users[chatId].invitedBy = referrerId;
-
-          await axios.post(`${URL}/sendMessage`, {
-            chat_id: referrerId,
-            text: "🎉 You earned 5 birr!",
-          });
-        }
-      }
-
       await axios.post(`${URL}/sendMessage`, {
         chat_id: chatId,
-        text: "👋 Welcome to Ethiopian Bingo Bot!",
+        text: "👋 Welcome to REAL Bingo!",
       });
 
       await mainMenu(chatId);
     }
 
-    // JOIN GAME
-    else if (text === "/join") {
+    // ===== JOIN =====
+    else if (text === "/join" || text === "🎮 Join Game") {
       players[chatId] = true;
+      cards[chatId] = generateCard();
 
       await axios.post(`${URL}/sendMessage`, {
         chat_id: chatId,
-        text: "✅ Joined next bingo round!",
-      });
-
-      await mainMenu(chatId);
-    }
-
-    // BALANCE
-    else if (text === "/balance") {
-      const user = users[chatId];
-      const name = user.username ? "@" + user.username : user.name;
-
-      await axios.post(`${URL}/sendMessage`, {
-        chat_id: chatId,
-        text: `👤 ${name}\n💰 Balance: ${user.balance} birr`,
-      });
-
-      await mainMenu(chatId);
-    }
-
-    // LEADERBOARD
-    else if (text === "/leaderboard") {
-      const sorted = Object.entries(users)
-        .sort((a, b) => b[1].balance - a[1].balance)
-        .slice(0, 10);
-
-      let msg = "🏆 Top Players:\n\n";
-
-      sorted.forEach((u, i) => {
-        const user = u[1];
-        const name = user.username ? "@" + user.username : user.name;
-        msg += `${i + 1}. ${name} — ${user.balance} birr\n`;
+        text: formatCard(cards[chatId], []),
       });
 
       await axios.post(`${URL}/sendMessage`, {
         chat_id: chatId,
-        text: msg,
+        text: "✅ Joined! Game will start soon...",
       });
-
-      await mainMenu(chatId);
     }
-
-    // INVITE
-    else if (text === "/invite") {
-      const link = `https://t.me/ethiopianbingo_bot?start=${chatId}`;
-
-      await axios.post(`${URL}/sendMessage`, {
-        chat_id: chatId,
-        text: `👥 Invite & earn 5 birr:\n${link}`,
-      });
-
-      await mainMenu(chatId);
-    }
-
-    // ===== BINGO GAME ENGINE =====
-    let bingoNumbers = [];
-
-    async function runBingoGame() {
-      if (Object.keys(players).length < 2) return;
-
-      bingoNumbers = [];
-
-      // generate 20 random numbers
-      while (bingoNumbers.length < 20) {
-        const num = Math.floor(Math.random() * 75) + 1;
-        if (!bingoNumbers.includes(num)) bingoNumbers.push(num);
-      }
-
-      // send numbers slowly
-      for (let num of bingoNumbers) {
-        for (let p in players) {
-          await axios.post(`${URL}/sendMessage`, {
-            chat_id: p,
-            text: `🎱 Number: ${num}`,
-          });
-        }
-        await new Promise(r => setTimeout(r, 2000));
-      }
-
-      // pick winner
-      const ids = Object.keys(players);
-      const winnerId = ids[Math.floor(Math.random() * ids.length)];
-
-      users[winnerId].balance += 30;
-      saveUsers();
-
-      const winner = users[winnerId];
-      const name = winner.username ? "@" + winner.username : winner.name;
-
-      for (let p of ids) {
-        await axios.post(`${URL}/sendMessage`, {
-          chat_id: p,
-          text: `🏆 BINGO WINNER: ${name}\n💰 +30 birr`,
-        });
-      }
-
-      players = {};
-    }
-
-    // AUTO START GAME
-    setTimeout(runBingoGame, 10000);
-
-    // ===== DEPOSIT / WITHDRAW / BROADCAST SAME AS BEFORE =====
 
     res.sendStatus(200);
   } catch (e) {
@@ -225,6 +142,64 @@ app.post(`/${TOKEN}`, async (req, res) => {
     res.sendStatus(200);
   }
 });
+
+// ===== GAME ENGINE =====
+async function runGame() {
+  if (Object.keys(players).length < 2) return;
+
+  calledNumbers = [];
+
+  let numbers = [];
+  while (numbers.length < 75) {
+    let n = Math.floor(Math.random() * 75) + 1;
+    if (!numbers.includes(n)) numbers.push(n);
+  }
+
+  for (let num of numbers) {
+    calledNumbers.push(num);
+
+    for (let p in players) {
+      await axios.post(`${URL}/sendMessage`, {
+        chat_id: p,
+        text: `🎱 Number: ${num}`,
+      });
+
+      // update card view
+      await axios.post(`${URL}/sendMessage`, {
+        chat_id: p,
+        text: formatCard(cards[p], calledNumbers),
+      });
+
+      // check win
+      if (checkWin(cards[p], calledNumbers)) {
+        users[p].balance += 50;
+        saveUsers();
+
+        const user = users[p];
+        const name = user.username ? "@" + user.username : user.name;
+
+        for (let all in players) {
+          await axios.post(`${URL}/sendMessage`, {
+            chat_id: all,
+            text: `🏆 BINGO WINNER: ${name}\n💰 +50 birr`,
+          });
+        }
+
+        players = {};
+        cards = {};
+        return;
+      }
+    }
+
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  players = {};
+  cards = {};
+}
+
+// AUTO GAME LOOP
+setInterval(runGame, 5 * 60 * 1000);
 
 // ===== SERVER =====
 const PORT = process.env.PORT || 3000;
