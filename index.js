@@ -4,45 +4,45 @@ const axios = require("axios");
 const app = express();
 app.use(express.json());
 
-const TOKEN = process.env.BOT_TOKEN;
+// ===== SETTINGS =====
+const TOKEN = process.env.BOT_TOKEN; // put in Render env
 const TELEGRAM_API = `https://api.telegram.org/bot${TOKEN}`;
 
-// ✅ VERY IMPORTANT: ROOT PATH "/"
-app.post("/", async (req, res) => {
-  try {
-    console.log("Incoming:", req.body);
+// serve web app
+app.use(express.static("public"));
 
-    const msg = req.body.message;
+// ===== WEBHOOK =====
+app.post(`/${TOKEN}`, async (req, res) => {
+  const message = req.body.message;
 
-    if (msg) {
-      const chatId = msg.chat.id;
-      const text = msg.text || "";
+  if (message) {
+    const chatId = message.chat.id;
+    const text = message.text;
 
-      if (text === "/start") {
-        await axios.post(`${TELEGRAM_API}/sendMessage`, {
-          chat_id: chatId,
-          text: "✅ Bot working!",
-        });
-      }
-
-      if (text.toLowerCase().includes("play")) {
-        await axios.post(`${TELEGRAM_API}/sendMessage`, {
-          chat_id: chatId,
-          text: "🎲 Game started!",
-        });
-      }
+    // START
+    if (text === "/start") {
+      await axios.post(`${TELEGRAM_API}/sendMessage`, {
+        chat_id: chatId,
+        text: "🎮 Welcome to Ethiopian Bingo!\nClick Play to start.",
+      });
     }
 
-    res.sendStatus(200);
-  } catch (err) {
-    console.log("Error:", err.message);
-    res.sendStatus(200);
+    // PLAY
+    if (text && text.includes("play")) {
+      await axios.post(`${TELEGRAM_API}/sendMessage`, {
+        chat_id: chatId,
+        text: "🎲 Game started!\nNumbers coming soon...",
+      });
+    }
   }
+
+  res.sendStatus(200);
 });
 
+// test
 app.get("/", (req, res) => {
-  res.send("Bot running");
+  res.send("Bingo + Bot Running!");
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("Server running on", PORT));
+app.listen(PORT, () => console.log("Server running"));
