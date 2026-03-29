@@ -1,122 +1,82 @@
 const express = require("express");
-const axios = require("axios");
+const bodyParser = require("body-parser");
+const TelegramBot = require("node-telegram-bot-api");
 
 const app = express();
-app.use(express.json());
+app.use(bodyParser.json());
 
-// ================= CONFIG =================
+// ENV
 const TOKEN = process.env.BOT_TOKEN;
-const TELEGRAM_API = https://api.telegram.org/bot${TOKEN};
+const ADMIN_ID = process.env.ADMIN_ID;
 
-// ================= DATA (TEMP DATABASE) =================
-let users = {};     // { userId: { balance: number } }
-let players = [];   // current game players
+// BOT
+const bot = new TelegramBot(TOKEN);
 
-// ================= HOME =================
+// MEMORY DB
+let users = {};
+let players = [];
+
+// WEBHOOK
+app.post(`/${TOKEN}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
+});
+
+// ROOT
 app.get("/", (req, res) => {
-  res.send("Bingo + Balance Running!");
+    res.send("Bingo + Balance Running!");
 });
 
-// ================= BOT =================
-app.post(/${TOKEN}, async (req, res) => {
-  try {
-    const message = req.body.message;
-    if (!message) return res.sendStatus(200);
+// ADD MONEY
+bot.onText(/\/add (\d+) (\d+)/, (msg, match) => {
+    if (msg.from.id != ADMIN_ID) return;
 
-    const chatId = message.chat.id;
-    const userId = message.from.id;
-    const text = message.text || "";
+    const userId = match[1];
+    const amount = parseInt(match[2]);
 
-    // create user if not exist
-    if (!users[userId]) {
-      users[userId] = { balance: 0 };
-    }
+    if (!users[userId]) users[userId] = { balance: 0 };
 
-    // ================= COMMANDS =================
+    users[userId].balance += amount;
 
-    // START
-    if (text === "/start") {
-      await send(chatId, "🎉 Welcome to Beteseb Bingo!\nUse /join to play");
-    }
-
-    // BALANCE
-    else if (text === "/balance") {
-      await send(chatId, 💰 Balance: ${users[userId].balance} birr);
-    }
-
-    // ADMIN ADD MONEY
-    else if (text.startsWith("/add")) {
-      const parts = text.split(" ");
-      const target = parts[1];
-      const amount = parseInt(parts[2]);
-
-      if (!users[target]) users[target] = { balance: 0 };
-      users[target].balance += amount;
-
-      await send(chatId, ✅ Added ${amount} birr);
-    }
-
-    // JOIN GAME
-    else if (text === "/join") {
-      if (players.includes(userId)) {
-        return send(chatId, "⚠️ You already joined");
-      }
-
-      if (users[userId].balance < 5) {
-        return send(chatId, "❌ Need 5 birr to join");
-      }
-
-      users[userId].balance -= 5;
-      players.push(userId);
-
-      await send(chatId, ✅ Joined game (${players.length} players));
-
-      // START GAME IF 2+ PLAYERS
-      if (players.length >= 2) {
-        startGame();
-      }
-    }
-
-    // DEFAULT
-    else {
-      await send(chatId, "Unknown command");
-    }
-
-    res.sendStatus(200);
-
-  } catch (err) {
-    console.log(err);
-    res.sendStatus(200);
-  }
+    bot.sendMessage(msg.chat.id, `✅ Added ${amount} birr`);
 });
 
-// ================= GAME LOGIC =================
-async function startGame() {
-  console.log("Game started");
+// BALANCE
+bot.onText(/\/balance/, (msg) => {
+    const id = msg.from.id;
 
-  // wait 40 seconds
-  setTimeout(async () => {
-    const winner = players[Math.floor(Math.random() * players.length)];
+    if (!users[id]) users[id] = { balance: 0 };
 
-    users[winner].balance += 20;
+    bot.sendMessage(msg.chat.id, `💰 Balance: ${users[id].balance} birr`);
+});
 
-    await send(winner, "🏆 You won 20 birr!");
+// JOIN
+bot.onText(/\/join/, (msg) => {
+    const id = msg.from.id;
 
-    players = []; // reset game
-  }, 40000);
-}
+    if (!users[id]) users[id] = { balance: 0 };
 
-// ================= SEND FUNCTION =================
-async function send(chatId, text) {
-  await axios.post(${TELEGRAM_API}/sendMessage, {
-    chat_id: chatId,
-    text: text,
-  });
-}
+    if (users[id].balance < 5) {
+        return bot.sendMessage(msg.chat.id, "❌ Need 5 birr");
+    }
 
-// ================= SERVER =================
-const PORT = process.env.PORT || 10000;
+    users[id].balance -= 5;
+    players.push(id);
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("Server running on port " + PORT);
+    bot.sendMessage(msg.chat.id, "✅ Joined!");
+
+    if (players.length >= 2) {
+        const winner = players[Math.floor(Math.random() * players.length)];
+        users[winner].balance += 20;
+
+        bot.sendMessage(msg.chat.id, `🏆 Winner: ${winner} gets 20 birr`);
+
+        players = [];
+    }
+});
+
+// PORT FIX (VERY IMPORTANT)
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log("Server running on port " + PORT);
 });
