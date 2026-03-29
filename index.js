@@ -1,48 +1,43 @@
 const express = require("express");
-const axios = require("axios");
+const TelegramBot = require("node-telegram-bot-api");
 
 const app = express();
 app.use(express.json());
 
-// ===== SETTINGS =====
-const TOKEN = process.env.BOT_TOKEN; // put in Render env
-const TELEGRAM_API = `https://api.telegram.org/bot${TOKEN}`;
+const TOKEN = process.env.BOT_TOKEN;
 
-// serve web app
-app.use(express.static("public"));
+// IMPORTANT: webhook mode
+const bot = new TelegramBot(TOKEN, { webHook: true });
 
-// ===== WEBHOOK =====
-app.post(`/${TOKEN}`, async (req, res) => {
-  const message = req.body.message;
-
-  if (message) {
-    const chatId = message.chat.id;
-    const text = message.text;
-
-    // START
-    if (text === "/start") {
-      await axios.post(`${TELEGRAM_API}/sendMessage`, {
-        chat_id: chatId,
-        text: "🎮 Welcome to Ethiopian Bingo!\nClick Play to start.",
-      });
-    }
-
-    // PLAY
-    if (text && text.includes("play")) {
-      await axios.post(`${TELEGRAM_API}/sendMessage`, {
-        chat_id: chatId,
-        text: "🎲 Game started!\nNumbers coming soon...",
-      });
-    }
-  }
-
+// ===== WEBHOOK ROUTE (ROOT "/") =====
+app.post("/", (req, res) => {
+  bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-// test
+// ===== TEST ROUTE =====
 app.get("/", (req, res) => {
-  res.send("Bingo + Bot Running!");
+  res.send("Bot running ✅");
 });
 
+// ===== BOT COMMANDS =====
+bot.on("message", (msg) => {
+  const chatId = msg.chat.id;
+  const text = msg.text || "";
+
+  console.log("MESSAGE:", text);
+
+  if (text === "/start") {
+    bot.sendMessage(chatId, "🎉 Welcome to Ethiopian Bingo!\nClick Play on website.");
+  } 
+  else if (text.toLowerCase().includes("play")) {
+    bot.sendMessage(chatId, "🎲 Game starting...");
+  } 
+  else {
+    bot.sendMessage(chatId, "You said: " + text);
+  }
+});
+
+// ===== START SERVER =====
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("Server running"));
+app.listen(PORT, () => console.log("Server running on port", PORT));
