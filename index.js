@@ -9,13 +9,13 @@ const TOKEN = process.env.TOKEN;
 const URL = `https://api.telegram.org/bot${TOKEN}`;
 
 // ===== GAME DATA =====
-let players = [];
+let players = {};
 let numbersCalled = [];
 let gameRunning = false;
 
 // ===== HOME =====
 app.get("/", (req, res) => {
-  res.send("Multiplayer Bingo Running!");
+  res.send("Bingo Winner System Running!");
 });
 
 app.post(`/${TOKEN}`, async (req, res) => {
@@ -30,29 +30,55 @@ app.post(`/${TOKEN}`, async (req, res) => {
     if (text === "/start") {
       await axios.post(`${URL}/sendMessage`, {
         chat_id: chatId,
-        text: "🎰 Multiplayer Bingo!\nCommands:\n/join\n/startgame\n/help",
+        text: "🎰 Bingo Game!\n/join\n/startgame\n/mycard\n/help",
       });
     }
 
-    // JOIN GAME
+    // JOIN
     else if (text === "/join") {
-      if (players.includes(chatId)) {
-        await axios.post(`${URL}/sendMessage`, {
+      if (players[chatId]) {
+        return await axios.post(`${URL}/sendMessage`, {
           chat_id: chatId,
-          text: "✅ You already joined!",
-        });
-      } else {
-        players.push(chatId);
-        await axios.post(`${URL}/sendMessage`, {
-          chat_id: chatId,
-          text: "🎟 You joined the bingo game!",
+          text: "✅ Already joined!",
         });
       }
+
+      // generate 5 random numbers
+      let card = [];
+      while (card.length < 5) {
+        let num = Math.floor(Math.random() * 20) + 1;
+        if (!card.includes(num)) card.push(num);
+      }
+
+      players[chatId] = {
+        card: card,
+        matched: []
+      };
+
+      await axios.post(`${URL}/sendMessage`, {
+        chat_id: chatId,
+        text: `🎟 Your card:\n${card.join(", ")}`,
+      });
     }
 
-    // START GAME (ADMIN = first player)
+    // SHOW CARD
+    else if (text === "/mycard") {
+      if (!players[chatId]) {
+        return await axios.post(`${URL}/sendMessage`, {
+          chat_id: chatId,
+          text: "❌ Join first with /join",
+        });
+      }
+
+      await axios.post(`${URL}/sendMessage`, {
+        chat_id: chatId,
+        text: `🎟 Your card:\n${players[chatId].card.join(", ")}\n✅ Matched: ${players[chatId].matched.join(", ")}`,
+      });
+    }
+
+    // START GAME
     else if (text === "/startgame") {
-      if (players.length < 2) {
+      if (Object.keys(players).length < 2) {
         return await axios.post(`${URL}/sendMessage`, {
           chat_id: chatId,
           text: "❌ Need at least 2 players!",
@@ -62,15 +88,13 @@ app.post(`/${TOKEN}`, async (req, res) => {
       gameRunning = true;
       numbersCalled = [];
 
-      // send start message
-      for (let p of players) {
+      for (let p in players) {
         await axios.post(`${URL}/sendMessage`, {
           chat_id: p,
-          text: "🚀 Game started! Numbers coming...",
+          text: "🚀 Game started!",
         });
       }
 
-      // start calling numbers
       callNumbers();
     }
 
@@ -78,7 +102,7 @@ app.post(`/${TOKEN}`, async (req, res) => {
     else if (text === "/help") {
       await axios.post(`${URL}/sendMessage`, {
         chat_id: chatId,
-        text: "/join - join game\n/startgame - start\n/help",
+        text: "/join\n/startgame\n/mycard\n/help",
       });
     }
 
@@ -89,15 +113,10 @@ app.post(`/${TOKEN}`, async (req, res) => {
   }
 });
 
-// ===== NUMBER CALLING FUNCTION =====
+// ===== NUMBER CALLING =====
 async function callNumbers() {
   let interval = setInterval(async () => {
     if (!gameRunning) return clearInterval(interval);
-
-    if (numbersCalled.length >= 20) {
-      gameRunning = false;
-      return;
-    }
 
     let num;
     do {
@@ -106,13 +125,35 @@ async function callNumbers() {
 
     numbersCalled.push(num);
 
-    for (let p of players) {
+    for (let p in players) {
+      let player = players[p];
+
+      if (player.card.includes(num)) {
+        player.matched.push(num);
+      }
+
       await axios.post(`${URL}/sendMessage`, {
         chat_id: p,
         text: `📢 Number: ${num}`,
       });
+
+      // 🎉 CHECK WIN
+      if (player.matched.length === player.card.length) {
+        gameRunning = false;
+
+        // announce winner
+        for (let all in players) {
+          await axios.post(`${URL}/sendMessage`, {
+            chat_id: all,
+            text: `🏆 WINNER: ${p}`,
+          });
+        }
+
+        players = {}; // reset game
+        return;
+      }
     }
-  }, 5000); // every 5 sec
+  }, 5000);
 }
 
 const PORT = process.env.PORT || 3000;
