@@ -1,1 +1,2 @@
-gunicorn main:app
+npm install
+node index.js
