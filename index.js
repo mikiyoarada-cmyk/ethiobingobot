@@ -1,10 +1,10 @@
 const express = require("express");
 const app = express();
 
-// Serve web app
+// serve web app
 app.use(express.static("public"));
 
-// Test route
+// test route
 app.get("/test", (req, res) => {
   res.send("Bot is working!");
 });
