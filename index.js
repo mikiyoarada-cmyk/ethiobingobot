@@ -1,25 +1,37 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const axios = require("axios");
+const fs = require("fs");
 
 const app = express();
 app.use(bodyParser.json());
 
 const TOKEN = process.env.TOKEN;
-const ADMIN_ID = process.env.ADMIN_ID; // put your telegram ID in Render
+const ADMIN_ID = process.env.ADMIN_ID;
 const URL = `https://api.telegram.org/bot${TOKEN}`;
+
+// ===== LOAD DATABASE =====
+let users = {};
+if (fs.existsSync("users.json")) {
+  users = JSON.parse(fs.readFileSync("users.json"));
+}
+
+// ===== SAVE FUNCTION =====
+function saveUsers() {
+  fs.writeFileSync("users.json", JSON.stringify(users, null, 2));
+}
 
 // ===== GAME DATA =====
 let players = {};
-let balances = {};
 let numbersCalled = [];
 let gameRunning = false;
 
 // ===== HOME =====
 app.get("/", (req, res) => {
-  res.send("Bingo + Balance Running!");
+  res.send("Bingo DB Running!");
 });
 
+// ===== WEBHOOK =====
 app.post(`/${TOKEN}`, async (req, res) => {
   try {
     const message = req.body.message;
@@ -28,8 +40,11 @@ app.post(`/${TOKEN}`, async (req, res) => {
     const chatId = message.chat.id;
     const text = (message.text || "").trim();
 
-    // create balance if not exist
-    if (!balances[chatId]) balances[chatId] = 0;
+    // create user if not exist
+    if (!users[chatId]) {
+      users[chatId] = { balance: 0 };
+      saveUsers();
+    }
 
     // START
     if (text === "/start") {
@@ -43,11 +58,11 @@ app.post(`/${TOKEN}`, async (req, res) => {
     else if (text === "/balance") {
       await axios.post(`${URL}/sendMessage`, {
         chat_id: chatId,
-        text: `💰 Your balance: ${balances[chatId]}`,
+        text: `💰 Balance: ${users[chatId].balance}`,
       });
     }
 
-    // JOIN
+    // JOIN GAME
     else if (text === "/join") {
       if (players[chatId]) {
         return await axios.post(`${URL}/sendMessage`, {
@@ -56,15 +71,15 @@ app.post(`/${TOKEN}`, async (req, res) => {
         });
       }
 
-      // 🎟 OPTIONAL: cost to join
-      if (balances[chatId] < 5) {
+      if (users[chatId].balance < 5) {
         return await axios.post(`${URL}/sendMessage`, {
           chat_id: chatId,
-          text: "❌ Need 5 birr to join",
+          text: "❌ Need 5 birr",
         });
       }
 
-      balances[chatId] -= 5;
+      users[chatId].balance -= 5;
+      saveUsers();
 
       let card = [];
       while (card.length < 5) {
@@ -76,7 +91,7 @@ app.post(`/${TOKEN}`, async (req, res) => {
 
       await axios.post(`${URL}/sendMessage`, {
         chat_id: chatId,
-        text: `🎟 Your card:\n${card.join(", ")}`,
+        text: `🎟 Card:\n${card.join(", ")}`,
       });
     }
 
@@ -85,7 +100,7 @@ app.post(`/${TOKEN}`, async (req, res) => {
       if (Object.keys(players).length < 2) {
         return await axios.post(`${URL}/sendMessage`, {
           chat_id: chatId,
-          text: "❌ Need at least 2 players!",
+          text: "❌ Need 2 players",
         });
       }
 
@@ -108,12 +123,14 @@ app.post(`/${TOKEN}`, async (req, res) => {
       const userId = parts[1];
       const amount = parseInt(parts[2]);
 
-      if (!balances[userId]) balances[userId] = 0;
-      balances[userId] += amount;
+      if (!users[userId]) users[userId] = { balance: 0 };
+
+      users[userId].balance += amount;
+      saveUsers();
 
       await axios.post(`${URL}/sendMessage`, {
         chat_id: chatId,
-        text: "✅ Money added",
+        text: "✅ Added",
       });
     }
 
@@ -126,7 +143,7 @@ app.post(`/${TOKEN}`, async (req, res) => {
 
     res.sendStatus(200);
   } catch (err) {
-    console.error(err);
+    console.log(err);
     res.sendStatus(200);
   }
 });
@@ -159,13 +176,13 @@ async function callNumbers() {
       if (player.matched.length === player.card.length) {
         gameRunning = false;
 
-        // 💰 GIVE REWARD
-        balances[p] += 20;
+        users[p].balance += 20;
+        saveUsers();
 
         for (let all in players) {
           await axios.post(`${URL}/sendMessage`, {
             chat_id: all,
-            text: `🏆 WINNER: ${p}\n💰 Won 20 birr!`,
+            text: `🏆 Winner: ${p}\n💰 +20 birr`,
           });
         }
 
