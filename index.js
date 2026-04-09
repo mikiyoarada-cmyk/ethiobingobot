@@ -11,11 +11,21 @@ app.use(express.static(path.join(__dirname, 'public')));
 const TOKEN = process.env.BOT_TOKEN;
 const CHANNEL = process.env.CHANNEL;
 const MONGO_URI = process.env.MONGO_URI;
+const URL = process.env.RENDER_EXTERNAL_URL; // Render gives this
 
-// ===== DB =====
+// ===== MONGODB =====
 mongoose.connect(MONGO_URI)
   .then(() => console.log("MongoDB connected"))
   .catch(err => console.log(err));
+
+// ===== TELEGRAM WEBHOOK =====
+const bot = new TelegramBot(TOKEN);
+bot.setWebHook(`${URL}/bot${TOKEN}`);
+
+app.post(`/bot${TOKEN}`, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
 
 // ===== MODELS =====
 const Card = mongoose.model('Card', new mongoose.Schema({
@@ -24,17 +34,27 @@ const Card = mongoose.model('Card', new mongoose.Schema({
   isWinner: { type: Boolean, default: false }
 }));
 
-const Payment = mongoose.model('Payment', new mongoose.Schema({
-  user: String,
-  txId: String,
-  amount: Number,
-  status: String
-}));
+// ===== CREATE CARDS =====
+async function createCards() {
+  await Card.deleteMany({});
+  let cards = [];
+  for (let i = 1; i <= 600; i++) {
+    let card = [];
+    for (let r = 0; r < 5; r++) {
+      let row = [];
+      for (let c = 0; c < 5; c++) {
+        row.push(Math.floor(Math.random() * 75) + 1);
+      }
+      card.push(row);
+    }
+    cards.push({ cardId: i, numbers: card });
+  }
+  await Card.insertMany(cards);
+  console.log("600 cards ready");
+}
+createCards();
 
-// ===== TELEGRAM =====
-const bot = new TelegramBot(TOKEN, { polling: true });
-
-// ===== UTILS =====
+// ===== VOICE =====
 function getVoice(num) {
   return path.join(__dirname, `public/voices/B${num}.mp3`);
 }
@@ -42,56 +62,36 @@ function getStartVoice() {
   return path.join(__dirname, `public/voices/start.mp3`);
 }
 
-function generateCard() {
-  let card = [];
-  for (let i = 0; i < 5; i++) {
-    let row = [];
-    for (let j = 0; j < 5; j++) {
-      row.push(Math.floor(Math.random() * 75) + 1);
-    }
-    card.push(row);
-  }
-  return card;
-}
-
-// ===== CREATE 600 CARDS =====
-async function createCards() {
-  await Card.deleteMany({});
-  let cards = [];
-  for (let i = 1; i <= 600; i++) {
-    cards.push({ cardId: i, numbers: generateCard() });
-  }
-  await Card.insertMany(cards);
-  console.log("600 cards ready");
-}
-createCards();
-
 // ===== GAME =====
 let calledNumbers = [];
 let gameRunning = false;
 let interval;
 
-// start game
+// START GAME
 async function startGame() {
   if (gameRunning) return;
 
   calledNumbers = [];
   gameRunning = true;
 
-  bot.sendMessage(CHANNEL, "🎲 ጨዋታው ተጀምሯል");
-  bot.sendAudio(CHANNEL, getStartVoice());
+  console.log("Game started");
 
+  // TELEGRAM START
+  await bot.sendMessage(CHANNEL, "🎲 ጨዋታው ተጀምሯል");
+  await bot.sendAudio(CHANNEL, getStartVoice());
+
+  // START CALL LOOP
   interval = setInterval(callNumber, 3000);
 }
 
-// stop game
+// STOP GAME
 function stopGame() {
-  gameRunning = false;
   clearInterval(interval);
+  gameRunning = false;
   bot.sendMessage(CHANNEL, "🎉 Good Bingo");
 }
 
-// call number
+// CALL NUMBER
 async function callNumber() {
   if (!gameRunning) return;
 
@@ -102,10 +102,13 @@ async function callNumber() {
 
   calledNumbers.push(num);
 
-  bot.sendMessage(CHANNEL, `🎯 ${num}`);
-  bot.sendAudio(CHANNEL, getVoice(num));
+  console.log("Calling:", num);
 
-  // check winners
+  // SEND TELEGRAM
+  await bot.sendMessage(CHANNEL, `🎯 ${num}`);
+  await bot.sendAudio(CHANNEL, getVoice(num));
+
+  // CHECK WINNER
   const cards = await Card.find({ isWinner: false });
 
   for (let c of cards) {
@@ -114,9 +117,9 @@ async function callNumber() {
         c.isWinner = true;
         await c.save();
 
-        bot.sendMessage(CHANNEL, `🏆 Winner Card: ${c.cardId}`);
+        await bot.sendMessage(CHANNEL, `🏆 Winner Card: ${c.cardId}`);
         stopGame();
-        break;
+        return;
       }
     }
   }
@@ -128,34 +131,11 @@ app.get('/start', async (req, res) => {
   res.json({ msg: "Game started" });
 });
 
-app.get('/cards', async (req, res) => {
-  const cards = await Card.find();
-  res.json(cards);
-});
-
-app.post('/payment', async (req, res) => {
-  const { user, txId, amount } = req.body;
-  await Payment.create({ user, txId, amount, status: "pending" });
-  res.json({ msg: "Payment submitted" });
-});
-
-app.post('/approve/:txId', async (req, res) => {
-  const p = await Payment.findOne({ txId: req.params.txId });
-  if (!p) return res.json({ msg: "Not found" });
-  p.status = "approved";
-  await p.save();
-  res.json({ msg: "Approved" });
-});
-
-// dashboard fix
+// FIX DASHBOARD ROUTE
 app.get('/dashboard.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public/dashboard.html'));
 });
 
-// ===== TELEGRAM COMMANDS =====
-bot.onText(/\/startgame/, () => startGame());
-bot.onText(/\/call/, () => callNumber());
-
-// ===== START SERVER =====
+// ===== SERVER =====
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("Running on " + PORT));
