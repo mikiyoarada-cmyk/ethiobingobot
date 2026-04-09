@@ -1,33 +1,23 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Bingo Dashboard</title>
+  <title>Bingo</title>
 </head>
 <body>
+
 <h1>Bingo Dashboard</h1>
 
-<button onclick="call()">Call Number</button>
-<h2>Last Number: <span id="num"></span></h2>
+<button onclick="start()">Start Game</button>
 
-<h2>Called Numbers:</h2>
-<div id="called"></div>
-
-<h2>Winners:</h2>
-<div id="winners"></div>
+<h2 id="status"></h2>
 
 <script>
-async function call() {
-  let res = await fetch('/call');
+async function start() {
+  let res = await fetch('/start');
   let data = await res.json();
-  document.getElementById('num').innerText = data.num;
-  document.getElementById('called').innerText = data.calledNumbers.join(', ');
-
-  // fetch winners
-  let cardsRes = await fetch('/cards');
-  let cards = await cardsRes.json();
-  let winners = cards.filter(c => c.isWinner).map(c => c.cardId);
-  document.getElementById('winners').innerText = winners.join(', ') || "No winners yet";
+  document.getElementById('status').innerText = data.msg;
 }
 </script>
+
 </body>
 </html>
