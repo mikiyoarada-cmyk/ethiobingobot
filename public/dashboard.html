@@ -1,21 +1,44 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Bingo</title>
+  <title>Bingo Game</title>
 </head>
 <body>
 
-<h1>Bingo Dashboard</h1>
+<h1>Bingo Game</h1>
 
-<button onclick="start()">Start Game</button>
+<button onclick="startGame()">Start Game</button>
 
-<h2 id="status"></h2>
+<h2 id="number"></h2>
 
 <script>
-async function start() {
-  let res = await fetch('/start');
-  let data = await res.json();
-  document.getElementById('status').innerText = data.msg;
+let called = [];
+let interval;
+
+function startGame() {
+  called = [];
+  
+  // play start voice
+  let startAudio = new Audio("voices/start.mp3");
+  startAudio.play();
+
+  interval = setInterval(callNumber, 3000);
+}
+
+function callNumber() {
+  let num;
+
+  do {
+    num = Math.floor(Math.random() * 75) + 1;
+  } while (called.includes(num));
+
+  called.push(num);
+
+  document.getElementById("number").innerText = "Number: " + num;
+
+  // play voice
+  let audio = new Audio("voices/B" + num + ".mp3");
+  audio.play();
 }
 </script>
 
