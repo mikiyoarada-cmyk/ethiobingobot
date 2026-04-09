@@ -8,26 +8,40 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static("public"));
 
-/* ===============================
-   ENV
+/* =================================
+   DEBUG ENV CHECK
 ================================= */
+console.log("========== ENV DEBUG ==========");
+console.log("TOKEN =", process.env.TOKEN ? "FOUND ✅" : "MISSING ❌");
+console.log("MONGO_URL =", process.env.MONGO_URL ? "FOUND ✅" : "MISSING ❌");
+console.log("PORT =", process.env.PORT || 10000);
+console.log("================================");
+
 const TOKEN = process.env.TOKEN;
 const MONGO_URL = process.env.MONGO_URL;
 const PORT = process.env.PORT || 10000;
 
-if (!TOKEN || !MONGO_URL) {
-  console.log("❌ TOKEN or MONGO_URL missing in Render env");
-  process.exit(1);
+/* =================================
+   DO NOT STOP APP IF ENV MISSING
+================================= */
+if (!TOKEN) {
+  console.log("❌ TOKEN missing in Render Environment");
 }
 
-/* ===============================
-   MONGODB
-================================= */
-mongoose.connect(MONGO_URL)
-.then(() => console.log("✅ MongoDB Connected"))
-.catch(err => console.log("Mongo Error:", err.message));
+if (!MONGO_URL) {
+  console.log("❌ MONGO_URL missing in Render Environment");
+}
 
-/* ===============================
+/* =================================
+   MONGODB CONNECT ONLY IF EXISTS
+================================= */
+if (MONGO_URL) {
+  mongoose.connect(MONGO_URL)
+    .then(() => console.log("✅ MongoDB Connected"))
+    .catch(err => console.log("Mongo Error:", err.message));
+}
+
+/* =================================
    MODELS
 ================================= */
 const User = mongoose.model("User", {
@@ -40,79 +54,51 @@ const Card = mongoose.model("Card", {
   grid: Array
 });
 
-/* ===============================
-   TELEGRAM BOT
+/* =================================
+   TELEGRAM BOT START ONLY IF TOKEN EXISTS
 ================================= */
-const bot = new TelegramBot(TOKEN, { polling: false });
+let bot = null;
 
-async function startBot() {
-  try {
-    await bot.deleteWebHook();
-    await bot.startPolling({
-      restart: true,
-      interval: 3000
-    });
-    console.log("✅ EthiobingoBot Started");
-  } catch (error) {
-    console.log("Bot Error:", error.message);
+if (TOKEN) {
+  bot = new TelegramBot(TOKEN, { polling: false });
+
+  async function startBot() {
+    try {
+      await bot.deleteWebHook();
+      await bot.startPolling({
+        restart: true,
+        interval: 3000
+      });
+      console.log("✅ EthiobingoBot Started");
+    } catch (error) {
+      console.log("Bot Error:", error.message);
+    }
   }
+
+  startBot();
+
+  bot.onText(/\/start/, async (msg) => {
+    const id = msg.chat.id.toString();
+
+    let user = await User.findOne({ telegramId: id });
+    if (!user) {
+      user = await User.create({ telegramId: id });
+    }
+
+    bot.sendMessage(
+      id,
+      `🎰 EthiobingoBot\n\nWelcome!\nOpen Game:\nhttps://YOUR-APP.onrender.com/?id=${id}`
+    );
+  });
+
+  bot.on("polling_error", async (error) => {
+    console.log("Polling Error:", error.message);
+  });
 }
 
-startBot();
-
-/* ===============================
-   /START
+/* =================================
+   GENERATE BINGO CARD
 ================================= */
-bot.onText(/\/start/, async (msg) => {
-  const id = msg.chat.id.toString();
-
-  let user = await User.findOne({ telegramId: id });
-  if (!user) {
-    user = await User.create({ telegramId: id });
-  }
-
-  bot.sendMessage(
-    id,
-    `🎰 EthiobingoBot\n\nWelcome!\nOpen Game:\nhttps://YOUR-APP.onrender.com/?id=${id}`
-  );
-});
-
-/* ===============================
-   POLLING ERROR FIX
-================================= */
-bot.on("polling_error", async (error) => {
-  console.log("Polling Error:", error.message);
-
-  if (error.response && error.response.statusCode === 409) {
-    console.log("⚠️ Conflict detected. Restarting in 3 sec...");
-
-    setTimeout(async () => {
-      try {
-        await bot.stopPolling();
-        await bot.deleteWebHook();
-        await bot.startPolling({
-          restart: true,
-          interval: 3000
-        });
-        console.log("✅ Bot Restarted");
-      } catch (err) {
-        console.log("Restart Error:", err.message);
-      }
-    }, 3000);
-  }
-});
-
-/* ===============================
-   BINGO NUMBERS
-================================= */
-const letters = {
-  B: [1, 15],
-  I: [16, 30],
-  N: [31, 45],
-  G: [46, 60],
-  O: [61, 75]
-};
-
 function randomNumbers(min, max, count) {
   let nums = [];
   while (nums.length < count) {
@@ -132,10 +118,12 @@ function generateCard() {
   ];
 }
 
-/* ===============================
-   GENERATE 600 CARTELAS
+/* =================================
+   CREATE 600 CARDS
 ================================= */
 async function create600Cards() {
+  if (!MONGO_URL) return;
+
   const count = await Card.countDocuments();
 
   if (count >= 600) {
@@ -145,35 +133,39 @@ async function create600Cards() {
 
   await Card.deleteMany({});
 
-  let allCards = [];
+  let cards = [];
   for (let i = 1; i <= 600; i++) {
-    allCards.push({
+    cards.push({
       cardNumber: i,
       grid: generateCard()
     });
   }
 
-  await Card.insertMany(allCards);
+  await Card.insertMany(cards);
   console.log("✅ 600 Cartelas Created");
 }
 
-create600Cards();
+setTimeout(() => {
+  create600Cards();
+}, 3000);
 
-/* ===============================
-   NUMBER CALL SYSTEM
+/* =================================
+   BINGO CALL SYSTEM
 ================================= */
 let calledNumbers = [];
 
-function getLetter(number) {
-  if (number <= 15) return "B";
-  if (number <= 30) return "I";
-  if (number <= 45) return "N";
-  if (number <= 60) return "G";
+function getLetter(num) {
+  if (num <= 15) return "B";
+  if (num <= 30) return "I";
+  if (num <= 45) return "N";
+  if (num <= 60) return "G";
   return "O";
 }
 
 function callNextNumber() {
-  if (calledNumbers.length >= 75) return null;
+  if (calledNumbers.length >= 75) {
+    return null;
+  }
 
   let num;
   do {
@@ -183,20 +175,20 @@ function callNextNumber() {
   calledNumbers.push(num);
 
   const letter = getLetter(num);
+
   return {
     label: `${letter}${num}`,
     audio: `/sounds/${letter}${num}.mp3`
   };
 }
 
-/* ===============================
+/* =================================
    ROUTES
 ================================= */
 app.get("/", (req, res) => {
-  res.send("🎰 EthiobingoBot Running");
+  res.send("🎰 EthiobingoBot Running Successfully");
 });
 
-/* Balance */
 app.get("/balance", async (req, res) => {
   try {
     const user = await User.findOne({
@@ -211,13 +203,11 @@ app.get("/balance", async (req, res) => {
   }
 });
 
-/* Get all cards */
 app.get("/cards", async (req, res) => {
   const cards = await Card.find().limit(600);
   res.json(cards);
 });
 
-/* Call next number every request */
 app.get("/call-number", (req, res) => {
   const next = callNextNumber();
 
@@ -231,7 +221,6 @@ app.get("/call-number", (req, res) => {
   res.json(next);
 });
 
-/* Reset game */
 app.get("/reset-game", (req, res) => {
   calledNumbers = [];
   res.json({
@@ -239,7 +228,7 @@ app.get("/reset-game", (req, res) => {
   });
 });
 
-/* ===============================
+/* =================================
    ADMIN PANEL
 ================================= */
 app.get("/admin", (req, res) => {
@@ -268,7 +257,7 @@ app.post("/add", async (req, res) => {
   res.send("✅ Balance Added");
 });
 
-/* ===============================
+/* =================================
    START SERVER
 ================================= */
 app.listen(PORT, "0.0.0.0", () => {
