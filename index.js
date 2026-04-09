@@ -11,7 +11,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const TOKEN = process.env.BOT_TOKEN;
 const CHANNEL = process.env.CHANNEL;
 const MONGO_URI = process.env.MONGO_URI;
-const URL = process.env.RENDER_EXTERNAL_URL; // Render gives this
+const URL = process.env.RENDER_EXTERNAL_URL;
 
 // ===== MONGODB =====
 mongoose.connect(MONGO_URI)
@@ -20,6 +20,7 @@ mongoose.connect(MONGO_URI)
 
 // ===== TELEGRAM WEBHOOK =====
 const bot = new TelegramBot(TOKEN);
+
 bot.setWebHook(`${URL}/bot${TOKEN}`);
 
 app.post(`/bot${TOKEN}`, (req, res) => {
@@ -27,7 +28,12 @@ app.post(`/bot${TOKEN}`, (req, res) => {
   res.sendStatus(200);
 });
 
-// ===== MODELS =====
+// ===== ROOT FIX (NO MORE ERROR) =====
+app.get('/', (req, res) => {
+  res.send("✅ Bingo server is running");
+});
+
+// ===== MODEL =====
 const Card = mongoose.model('Card', new mongoose.Schema({
   cardId: Number,
   numbers: [[Number]],
@@ -38,6 +44,7 @@ const Card = mongoose.model('Card', new mongoose.Schema({
 async function createCards() {
   await Card.deleteMany({});
   let cards = [];
+
   for (let i = 1; i <= 600; i++) {
     let card = [];
     for (let r = 0; r < 5; r++) {
@@ -49,12 +56,13 @@ async function createCards() {
     }
     cards.push({ cardId: i, numbers: card });
   }
+
   await Card.insertMany(cards);
   console.log("600 cards ready");
 }
 createCards();
 
-// ===== VOICE =====
+// ===== VOICES =====
 function getVoice(num) {
   return path.join(__dirname, `public/voices/B${num}.mp3`);
 }
@@ -67,31 +75,26 @@ let calledNumbers = [];
 let gameRunning = false;
 let interval;
 
-// START GAME
 async function startGame() {
   if (gameRunning) return;
 
   calledNumbers = [];
   gameRunning = true;
 
-  console.log("Game started");
+  console.log("GAME STARTED");
 
-  // TELEGRAM START
   await bot.sendMessage(CHANNEL, "🎲 ጨዋታው ተጀምሯል");
   await bot.sendAudio(CHANNEL, getStartVoice());
 
-  // START CALL LOOP
   interval = setInterval(callNumber, 3000);
 }
 
-// STOP GAME
 function stopGame() {
   clearInterval(interval);
   gameRunning = false;
   bot.sendMessage(CHANNEL, "🎉 Good Bingo");
 }
 
-// CALL NUMBER
 async function callNumber() {
   if (!gameRunning) return;
 
@@ -102,13 +105,11 @@ async function callNumber() {
 
   calledNumbers.push(num);
 
-  console.log("Calling:", num);
+  console.log("CALL:", num);
 
-  // SEND TELEGRAM
   await bot.sendMessage(CHANNEL, `🎯 ${num}`);
   await bot.sendAudio(CHANNEL, getVoice(num));
 
-  // CHECK WINNER
   const cards = await Card.find({ isWinner: false });
 
   for (let c of cards) {
@@ -131,11 +132,15 @@ app.get('/start', async (req, res) => {
   res.json({ msg: "Game started" });
 });
 
-// FIX DASHBOARD ROUTE
-app.get('/dashboard.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/dashboard.html'));
+// ===== TELEGRAM COMMANDS =====
+bot.onText(/\/start/, (msg) => {
+  bot.sendMessage(msg.chat.id, "🤖 Bot is working!");
+});
+
+bot.onText(/\/startgame/, () => {
+  startGame();
 });
 
 // ===== SERVER =====
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log("Running on " + PORT));
