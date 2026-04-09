@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Join Bingo</title>
+</head>
+<body>
+
+<h1>Join Game</h1>
+
+<input id="name" placeholder="Enter name">
+<button onclick="join()">Join</button>
+
+<div id="pay"></div>
+
+<script>
+let userId;
+
+async function join(){
+  let name = document.getElementById('name').value;
+
+  let res = await fetch('/join',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name})
+  });
+
+  let data = await res.json();
+  userId = data._id;
+
+  document.getElementById('pay').innerHTML = `
+    <h3>Send Payment</h3>
+    <input id="tx" placeholder="Transaction ID">
+    <button onclick="pay()">Submit</button>
+  `;
+}
+
+async function pay(){
+  let tx = document.getElementById('tx').value;
+
+  await fetch('/pay',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({userId,txId:tx})
+  });
+
+  alert("Waiting approval");
+  window.location = "game.html";
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Bingo Game</title>
+</head>
+<body>
+
+<h1>Bingo</h1>
+<button onclick="start()">Start</button>
+
+<h2 id="num"></h2>
+<div id="cards"></div>
+
+<script>
+let called = [];
+let cards = [];
+
+async function loadCards(){
+  let res = await fetch('/cards');
+  cards = await res.json();
+
+  let html='';
+  cards.slice(0,20).forEach(c=>{
+    html += `<div>${c.cardId}: ${c.numbers.flat().join(', ')}</div>`;
+  });
+  document.getElementById('cards').innerHTML = html;
+}
+loadCards();
+
+function start(){
+  new Audio("voices/start.mp3").play();
+  setInterval(call,3000);
+}
+
+function call(){
+  let num;
+  do{
+    num=Math.floor(Math.random()*75)+1;
+  }while(called.includes(num));
+
+  called.push(num);
+
+  document.getElementById('num').innerText=num;
+  new Audio("voices/B"+num+".mp3").play();
+
+  checkWinner();
+}
+
+function checkWinner(){
+  for(let c of cards){
+    for(let row of c.numbers){
+      if(row.every(n=>called.includes(n))){
+        alert("Winner Card: "+c.cardId);
+        return;
+      }
+    }
+  }
+}
+</script>
+
+</body>
+</html>
