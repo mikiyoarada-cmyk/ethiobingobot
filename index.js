@@ -1,110 +1,177 @@
-require('dotenv').config();
+const express = require("express");
+const mongoose = require("mongoose");
+const TelegramBot = require("node-telegram-bot-api");
+require("dotenv").config();
 
-const http = require('http');
-const TelegramBot = require('node-telegram-bot-api');
-const mongoose = require('mongoose');
-const path = require('path');
+const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static("public"));
 
-// ================= ENV =================
-const token = process.env.BOT_TOKEN;
-const mongoURI = process.env.MONGODB_URI;
-const PORT = process.env.PORT;
+// =============================
+// ENV
+// =============================
+const TOKEN = process.env.TOKEN;
+const MONGO_URL = process.env.MONGO_URL;
+const PORT = process.env.PORT || 10000;
 
-// Debug logs
-console.log("BOT_TOKEN exists:", !!token);
-console.log("MONGODB_URI exists:", !!mongoURI);
-console.log("PORT:", PORT);
-
-// Validate env
-if (!token || !mongoURI) {
-  console.error("❌ Missing environment variables");
+// =============================
+// CHECK ENV
+// =============================
+if (!TOKEN) {
+  console.log("❌ TOKEN missing");
   process.exit(1);
 }
 
-// ================= MONGODB =================
-mongoose.connect(mongoURI)
-  .then(() => console.log("✅ MongoDB connected"))
-  .catch(err => console.error("❌ MongoDB error:", err));
-
-// ================= HTTP SERVER (CRITICAL FOR RENDER) =================
-const server = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('Bot is running 🚀');
-});
-
-// IMPORTANT: bind to 0.0.0.0
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🌐 Server running on port ${PORT}`);
-});
-
-// ================= TELEGRAM BOT =================
-const bot = new TelegramBot(token, { polling: true });
-
-console.log("🤖 Bot is running...");
-
-// ================= GAME =================
-let gameStarted = false;
-let numbers = [];
-let interval = null;
-
-function shuffle(array) {
-  return array.sort(() => Math.random() - 0.5);
+if (!MONGO_URL) {
+  console.log("❌ MONGO_URL missing");
+  process.exit(1);
 }
 
-// START GAME
-bot.onText(/\/startgame/, (msg) => {
-  const chatId = msg.chat.id;
+// =============================
+// MONGODB
+// =============================
+mongoose.connect(MONGO_URL)
+.then(() => console.log("✅ MongoDB Connected"))
+.catch(err => console.log("Mongo Error:", err.message));
 
-  if (gameStarted) {
-    return bot.sendMessage(chatId, "ጨዋታው ጀምሯል ❗");
-  }
-
-  gameStarted = true;
-  numbers = shuffle(Array.from({ length: 75 }, (_, i) => i + 1));
-
-  bot.sendMessage(chatId, "🎮 Game Started!");
-
-  interval = setInterval(() => {
-    if (!gameStarted) return;
-
-    if (numbers.length === 0) {
-      bot.sendMessage(chatId, "All numbers called!");
-      clearInterval(interval);
-      return;
-    }
-
-    const number = numbers.pop();
-
-    bot.sendMessage(chatId, `🎱 Number: ${number}`);
-
-    const voicePath = path.join(__dirname, 'public', 'voices', `${number}.mp3`);
-
-    bot.sendAudio(chatId, voicePath).catch(() => {});
-
-  }, 3000);
+// =============================
+// USER MODEL
+// =============================
+const User = mongoose.model("User", {
+  telegramId: String,
+  balance: { type: Number, default: 0 }
 });
 
-// END GAME
-bot.onText(/\/endgame/, (msg) => {
-  const chatId = msg.chat.id;
+// =============================
+// DELETE OLD WEBHOOK
+// FIX 409 CONFLICT ERROR
+// =============================
+const bot = new TelegramBot(TOKEN, { polling: false });
 
-  if (!gameStarted) {
-    return bot.sendMessage(chatId, "No active game.");
+async function startBot() {
+  try {
+    await bot.deleteWebHook();
+    console.log("✅ Old webhook removed");
+
+    await bot.startPolling({
+      restart: true,
+      interval: 3000
+    });
+
+    console.log("✅ Telegram Bot Running");
+  } catch (error) {
+    console.log("Bot Start Error:", error.message);
+  }
+}
+
+startBot();
+
+// =============================
+// TELEGRAM START COMMAND
+// =============================
+bot.onText(/\/start/, async (msg) => {
+  const id = msg.chat.id.toString();
+
+  let user = await User.findOne({ telegramId: id });
+
+  if (!user) {
+    user = await User.create({
+      telegramId: id
+    });
   }
 
-  gameStarted = false;
-
-  if (interval) {
-    clearInterval(interval);
-    interval = null;
-  }
-
-  bot.sendMessage(chatId, "🏁 Good Bingo 🎉 Game Ended!");
-});
-
-// MENU
-bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id,
-    "🎉 Bingo Bot Menu\n\n/startgame - Start Game\n/endgame - Stop Game"
+  bot.sendMessage(
+    id,
+    `🎰 Beteseb Bingo\n\nOpen Game:\nhttps://YOUR-APP.onrender.com/?id=${id}`
   );
+});
+
+// =============================
+// POLLING ERROR HANDLER
+// =============================
+bot.on("polling_error", async (error) => {
+  console.log("Polling Error:", error.message);
+
+  if (error.response && error.response.statusCode === 409) {
+    console.log("⚠️ Conflict detected. Restarting bot in 3 seconds...");
+
+    setTimeout(async () => {
+      try {
+        await bot.stopPolling();
+        await bot.deleteWebHook();
+        await bot.startPolling({
+          restart: true,
+          interval: 3000
+        });
+        console.log("✅ Bot restarted successfully");
+      } catch (err) {
+        console.log("Restart Error:", err.message);
+      }
+    }, 3000);
+  }
+});
+
+// =============================
+// ROOT
+// =============================
+app.get("/", (req, res) => {
+  res.send("🚀 Bingo Server Running");
+});
+
+// =============================
+// BALANCE API
+// =============================
+app.get("/balance", async (req, res) => {
+  try {
+    const user = await User.findOne({
+      telegramId: req.query.id
+    });
+
+    res.json({
+      balance: user ? user.balance : 0
+    });
+  } catch {
+    res.json({
+      balance: 0
+    });
+  }
+});
+
+// =============================
+// ADMIN PANEL
+// =============================
+app.get("/admin", (req, res) => {
+  res.send(`
+    <h2>Admin Panel</h2>
+    <form action="/add" method="POST">
+      <input name="id" placeholder="User ID"/><br/><br/>
+      <input name="amount" placeholder="Amount"/><br/><br/>
+      <button type="submit">Add Balance</button>
+    </form>
+  `);
+});
+
+app.post("/add", async (req, res) => {
+  const { id, amount } = req.body;
+
+  let user = await User.findOne({
+    telegramId: id
+  });
+
+  if (!user) {
+    return res.send("User not found");
+  }
+
+  user.balance += Number(amount);
+  await user.save();
+
+  res.send("✅ Balance Added");
+});
+
+// =============================
+// START SERVER
+// =============================
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`✅ Server running on port ${PORT}`);
 });
