@@ -1,86 +1,110 @@
 require('dotenv').config();
 
+const http = require('http');
 const TelegramBot = require('node-telegram-bot-api');
 const mongoose = require('mongoose');
+const path = require('path');
 
-// ENV variables
+// ================= ENV =================
 const token = process.env.BOT_TOKEN;
 const mongoURI = process.env.MONGODB_URI;
+const PORT = process.env.PORT;
 
-// Debug logs (important on Render)
+// Debug logs
 console.log("BOT_TOKEN exists:", !!token);
 console.log("MONGODB_URI exists:", !!mongoURI);
+console.log("PORT:", PORT);
 
-// Safety checks
-if (!token) {
-  console.error("❌ BOT_TOKEN is missing");
+// Validate env
+if (!token || !mongoURI) {
+  console.error("❌ Missing environment variables");
   process.exit(1);
 }
 
-if (!mongoURI) {
-  console.error("❌ MONGODB_URI is missing");
-  process.exit(1);
-}
-
-// MongoDB connection
+// ================= MONGODB =================
 mongoose.connect(mongoURI)
   .then(() => console.log("✅ MongoDB connected"))
   .catch(err => console.error("❌ MongoDB error:", err));
 
-// Bot init
+// ================= HTTP SERVER (CRITICAL FOR RENDER) =================
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Bot is running 🚀');
+});
+
+// IMPORTANT: bind to 0.0.0.0
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🌐 Server running on port ${PORT}`);
+});
+
+// ================= TELEGRAM BOT =================
 const bot = new TelegramBot(token, { polling: true });
 
 console.log("🤖 Bot is running...");
 
-// Game state
+// ================= GAME =================
 let gameStarted = false;
 let numbers = [];
+let interval = null;
 
-// Shuffle
 function shuffle(array) {
   return array.sort(() => Math.random() - 0.5);
 }
 
-// Start command
-bot.onText(/\/start/, (msg) => {
+// START GAME
+bot.onText(/\/startgame/, (msg) => {
   const chatId = msg.chat.id;
 
-  bot.sendMessage(chatId, "🎉 Welcome to Bingo Bot!");
-});
-
-// Menu buttons
-bot.on('message', (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text;
-
-  if (text === "Start Game") {
-    if (gameStarted) {
-      return bot.sendMessage(chatId, "ጨዋታው ጀምሯል ❗");
-    }
-
-    gameStarted = true;
-    numbers = shuffle(Array.from({ length: 75 }, (_, i) => i + 1));
-
-    return bot.sendMessage(chatId, "🎮 Game Started!");
+  if (gameStarted) {
+    return bot.sendMessage(chatId, "ጨዋታው ጀምሯል ❗");
   }
 
-  if (text === "End Game") {
-    gameStarted = false;
-    numbers = [];
+  gameStarted = true;
+  numbers = shuffle(Array.from({ length: 75 }, (_, i) => i + 1));
 
-    return bot.sendMessage(chatId, "🏁 Good Bingo 🎉");
-  }
+  bot.sendMessage(chatId, "🎮 Game Started!");
 
-  if (text === "Call Number") {
-    if (!gameStarted) {
-      return bot.sendMessage(chatId, "Start the game first.");
-    }
+  interval = setInterval(() => {
+    if (!gameStarted) return;
 
     if (numbers.length === 0) {
-      return bot.sendMessage(chatId, "All numbers called!");
+      bot.sendMessage(chatId, "All numbers called!");
+      clearInterval(interval);
+      return;
     }
 
     const number = numbers.pop();
+
     bot.sendMessage(chatId, `🎱 Number: ${number}`);
+
+    const voicePath = path.join(__dirname, 'public', 'voices', `${number}.mp3`);
+
+    bot.sendAudio(chatId, voicePath).catch(() => {});
+
+  }, 3000);
+});
+
+// END GAME
+bot.onText(/\/endgame/, (msg) => {
+  const chatId = msg.chat.id;
+
+  if (!gameStarted) {
+    return bot.sendMessage(chatId, "No active game.");
   }
+
+  gameStarted = false;
+
+  if (interval) {
+    clearInterval(interval);
+    interval = null;
+  }
+
+  bot.sendMessage(chatId, "🏁 Good Bingo 🎉 Game Ended!");
+});
+
+// MENU
+bot.onText(/\/start/, (msg) => {
+  bot.sendMessage(msg.chat.id,
+    "🎉 Bingo Bot Menu\n\n/startgame - Start Game\n/endgame - Stop Game"
+  );
 });
