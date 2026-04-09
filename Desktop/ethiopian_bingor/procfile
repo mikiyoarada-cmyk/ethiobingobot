@@ -1,0 +1,1 @@
+worker: python telegram_bingo_bot.py

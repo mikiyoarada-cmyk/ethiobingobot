@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<h2>Admin Panel</h2>
+
+<button onclick="load()">Load Proofs</button>
+
+<div id="data"></div>
+
+<script>
+async function load(){
+  const res=await fetch("/proofs");
+  const data=await res.json();
+
+  let html="";
+
+  data.forEach(p=>{
+    html+=`
+      <p>
+        ${p.userId} | ${p.amount} | ${p.status}<br>
+        <img src="/uploads/${p.image}" width="100"><br>
+        <button onclick="ok('${p._id}')">Approve</button>
+        <button onclick="no('${p._id}')">Reject</button>
+      </p>
+    `;
+  });
+
+  document.getElementById("data").innerHTML=html;
+}
+
+async function ok(id){
+  await fetch("/approve?id="+id);
+  load();
+}
+
+async function no(id){
+  await fetch("/reject?id="+id);
+  load();
+}
+</script>
+
+</body>
+</html>
