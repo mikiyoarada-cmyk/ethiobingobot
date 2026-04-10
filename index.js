@@ -1,86 +1,115 @@
 const express = require('express');
+const http = require('http');
 const path = require('path');
 const mongoose = require('mongoose');
+const { Server } = require('socket.io');
+const TelegramBot = require('node-telegram-bot-api');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 const MONGO = process.env.MONGO_URI;
+const BOT_TOKEN = process.env.BOT_TOKEN;
 
-// DB
 mongoose.connect(MONGO)
-.then(()=>console.log("Mongo connected"))
+.then(()=>console.log("MongoDB connected"))
 .catch(err=>console.log(err));
 
 // ===== MODELS =====
 const User = mongoose.model('User', new mongoose.Schema({
-  name: String,
-  txId: String,
-  approved: Boolean,
-  expireAt: Date
+  name:String,
+  txId:String,
+  approved:Boolean,
+  expireAt:Date
 }));
 
-const Card = mongoose.model('Card', new mongoose.Schema({
-  cardId: Number,
-  numbers: [[Number]]
-}));
+// ===== TELEGRAM BOT =====
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-// ===== CREATE 600 CARDS =====
-async function createCards() {
-  if (await Card.countDocuments() > 0) return;
+// approve command
+bot.onText(/\/approve (.+)/, async (msg, match)=>{
+  const userId = match[1];
 
-  let cards = [];
-  for (let i = 1; i <= 600; i++) {
-    let card = [];
-    for (let r = 0; r < 5; r++) {
-      let row = [];
-      for (let c = 0; c < 5; c++) {
-        row.push(Math.floor(Math.random()*75)+1);
-      }
-      card.push(row);
-    }
-    cards.push({ cardId: i, numbers: card });
-  }
-  await Card.insertMany(cards);
-  console.log("600 cards ready");
-}
-createCards();
-
-// ===== API =====
-
-// join game
-app.post('/join', async (req,res)=>{
-  const { name } = req.body;
-  const user = await User.create({ name, approved:false });
-  res.json(user);
-});
-
-// submit payment
-app.post('/pay', async (req,res)=>{
-  const { userId, txId } = req.body;
-  await User.findByIdAndUpdate(userId,{ txId });
-  res.json({msg:"Submitted"});
-});
-
-// approve (ADMIN)
-app.post('/approve/:id', async (req,res)=>{
   const expire = new Date();
   expire.setDate(expire.getDate()+30);
 
-  await User.findByIdAndUpdate(req.params.id,{
+  await User.findByIdAndUpdate(userId,{
     approved:true,
-    expireAt: expire
+    expireAt:expire
   });
 
-  res.json({msg:"Approved 30 days"});
+  bot.sendMessage(msg.chat.id,"✅ Approved 30 days");
 });
 
-// get cards
-app.get('/cards', async (req,res)=>{
-  const cards = await Card.find();
-  res.json(cards);
+// reject
+bot.onText(/\/reject (.+)/, async (msg, match)=>{
+  const userId = match[1];
+  await User.findByIdAndDelete(userId);
+  bot.sendMessage(msg.chat.id,"❌ Rejected");
 });
 
-// ===== SERVER =====
-app.listen(10000, ()=>console.log("Running"));
+// ===== GAME STATE =====
+let called = [];
+let running = false;
+
+// ===== SOCKET =====
+io.on('connection', (socket)=>{
+
+  socket.emit('state', { called });
+
+  socket.on('start', ()=>{
+    if(running) return;
+
+    running = true;
+    called = [];
+
+    io.emit('start');
+
+    let interval = setInterval(()=>{
+      let num;
+      do{
+        num = Math.floor(Math.random()*75)+1;
+      }while(called.includes(num));
+
+      called.push(num);
+
+      io.emit('number', num);
+
+      if(called.length > 75){
+        clearInterval(interval);
+        running=false;
+      }
+
+    },3000);
+  });
+
+});
+
+// ===== JOIN =====
+app.post('/join', async (req,res)=>{
+  const user = await User.create({
+    name:req.body.name,
+    approved:false
+  });
+  res.json(user);
+});
+
+// ===== PAY =====
+app.post('/pay', async (req,res)=>{
+  const { userId, txId } = req.body;
+
+  await User.findByIdAndUpdate(userId,{txId});
+
+  // send to telegram admin
+  bot.sendMessage(process.env.ADMIN_CHAT_ID,
+    `💰 Payment:\nUser: ${userId}\nTX: ${txId}\n\n/approve ${userId}\n/reject ${userId}`
+  );
+
+  res.json({msg:"Sent for approval"});
+});
+
+server.listen(10000, ()=>console.log("Running"));
