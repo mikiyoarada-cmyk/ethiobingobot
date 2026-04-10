@@ -5,7 +5,6 @@ const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const path = require("path");
-const TelegramBot = require("node-telegram-bot-api");
 
 const app = express();
 const server = http.createServer(app);
@@ -22,70 +21,71 @@ mongoose.connect(process.env.MONGODB_URI)
   .catch(err => console.log(err));
 
 /* =======================
-   MODELS
+   USER MODEL (WALLET SYSTEM)
 ======================= */
 const userSchema = new mongoose.Schema({
   phone: String,
-  transactionId: String,
+  balance: { type: Number, default: 0 },
   cartela: Array,
   room: { type: String, default: "global" },
-  status: { type: String, default: "pending" },
-  isWinner: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 
 const User = mongoose.model("User", userSchema);
 
 /* =======================
-   TELEGRAM BOT ADMIN CONTROL
+   ADMIN ADD BALANCE (MANUAL TOPUP)
 ======================= */
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+app.post("/admin/add-balance", async (req, res) => {
+  const { phone, amount } = req.body;
 
-/* ADMIN ID CHECK */
-const ADMIN_ID = process.env.ADMIN_CHAT_ID;
+  const user = await User.findOne({ phone });
 
-/* PAYMENT REQUEST → TELEGRAM APPROVAL BUTTONS */
-async function sendToAdmin(user) {
-  bot.sendMessage(
-    ADMIN_ID,
-    `💰 New Payment\nPhone: ${user.phone}\nTX: ${user.transactionId}`,
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "✅ Approve", callback_data: `ap_${user._id}` },
-            { text: "❌ Reject", callback_data: `re_${user._id}` }
-          ]
-        ]
-      }
-    }
-  );
-}
+  if (!user) return res.json({ ok: false, msg: "User not found" });
 
-/* TELEGRAM CALLBACK */
-bot.on("callback_query", async (q) => {
+  user.balance += amount;
+  await user.save();
 
-  const data = q.data;
+  res.json({ ok: true, balance: user.balance });
+});
 
-  if (data.startsWith("ap_")) {
-    const id = data.split("_")[1];
+/* =======================
+   REGISTER USER
+======================= */
+app.post("/register", async (req, res) => {
+  const { phone } = req.body;
 
-    const u = await User.findById(id);
-    if (!u) return;
+  let user = await User.findOne({ phone });
 
-    u.status = "approved";
-    await u.save();
-
-    bot.sendMessage(q.message.chat.id, "✅ Approved");
+  if (!user) {
+    user = await User.create({ phone, balance: 0 });
   }
 
-  if (data.startsWith("re_")) {
-    const id = data.split("_")[1];
+  res.json({ ok: true, user });
+});
 
-    await User.findByIdAndUpdate(id, { status: "rejected" });
+/* =======================
+   BUY CARTELA (BALANCE CHECK)
+======================= */
+app.post("/buy-cartela", async (req, res) => {
+  const { phone } = req.body;
 
-    bot.sendMessage(q.message.chat.id, "❌ Rejected");
+  const user = await User.findOne({ phone });
+
+  if (!user) return res.json({ ok: false });
+
+  const price = 10;
+
+  if (user.balance < price) {
+    return res.json({ ok: false, msg: "Insufficient balance" });
   }
+
+  user.balance -= price;
+  user.cartela = generateCartela();
+
+  await user.save();
+
+  res.json({ ok: true, cartela: user.cartela, balance: user.balance });
 });
 
 /* =======================
@@ -104,113 +104,80 @@ function generateCartela() {
 }
 
 /* =======================
-   PAY SYSTEM (MANUAL + TELEGRAM VERIFY)
+   GAME SYSTEM (40 SEC START)
 ======================= */
-app.post("/pay", async (req, res) => {
-  const { phone, transactionId, room } = req.body;
-
-  const exists = await User.findOne({ transactionId });
-  if (exists) return res.json({ ok: false });
-
-  const user = await User.create({
-    phone,
-    transactionId,
-    cartela: generateCartela(),
-    room: room || "global"
-  });
-
-  sendToAdmin(user);
-
-  res.json({ ok: true, msg: "Sent to Telegram admin" });
-});
-
-/* =======================
-   DASHBOARD API
-======================= */
-app.get("/admin/stats", async (req, res) => {
-  const total = await User.countDocuments();
-  const approved = await User.countDocuments({ status: "approved" });
-  const pending = await User.countDocuments({ status: "pending" });
-  const winners = await User.countDocuments({ isWinner: true });
-
-  res.json({ total, approved, pending, winners });
-});
-
-/* =======================
-   USERS LIST
-======================= */
-app.get("/admin/list", async (req, res) => {
-  const users = await User.find().sort({ createdAt: -1 });
-  res.json(users);
-});
-
-/* =======================
-   WINNER SYSTEM (AUTO DETECTION HOOK)
-======================= */
-app.post("/winner", async (req, res) => {
-  const { userId } = req.body;
-
-  const user = await User.findById(userId);
-  if (!user) return res.json({ ok: false });
-
-  user.isWinner = true;
-  user.status = "winner";
-  await user.save();
-
-  io.emit("winner", userId);
-
-  res.json({ ok: true });
-});
-
-/* =======================
-   SOCKET MULTIPLAYER ROOMS
-======================= */
-let rooms = {};
 let interval;
+let countdown;
 
 io.on("connection", (socket) => {
 
-  socket.on("joinRoom", (room) => {
-    socket.join(room);
+  socket.on("startGame", () => {
+
+    io.emit("countdown", 40);
+
+    let t = 40;
+
+    countdown = setInterval(() => {
+      t--;
+      io.emit("countdown", t);
+
+      if (t <= 0) {
+        clearInterval(countdown);
+        startGame();
+      }
+
+    }, 1000);
+
   });
 
-  /* START GAME PER ROOM */
-  socket.on("startGame", (room = "global") => {
+  function startGame() {
 
-    let numbers = [];
-    io.to(room).emit("start");
-
-    if (interval) clearInterval(interval);
+    io.emit("start");
 
     interval = setInterval(() => {
 
       const num = Math.floor(Math.random() * 75) + 1;
-      numbers.push(num);
 
-      io.to(room).emit("number", num);
-
-      if (numbers.length >= 75) {
-        clearInterval(interval);
-      }
+      io.emit("number", num);
 
     }, 4000);
 
-  });
+  }
 
 });
 
 /* =======================
-   ADMIN PAGE ROUTE FIX
+   WINNER SYSTEM
 ======================= */
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/admin.html"));
+app.post("/winner", async (req, res) => {
+  const { phone } = req.body;
+
+  const user = await User.findOne({ phone });
+
+  if (!user) return res.json({ ok: false });
+
+  const prize = 100;
+
+  user.balance += prize;
+
+  await user.save();
+
+  io.emit("winner", phone);
+
+  res.json({ ok: true, prize });
+});
+
+/* =======================
+   ADMIN DASHBOARD API
+======================= */
+app.get("/admin/users", async (req, res) => {
+  const users = await User.find();
+  res.json(users);
 });
 
 /* =======================
    SERVER
 ======================= */
-const PORT = process.env.PORT || 10000;
-
-server.listen(PORT, () => {
-  console.log("🚀 Bingo PRO V6 Running");
+server.listen(process.env.PORT || 10000, () => {
+  console.log("🚀 Safe Bingo System Running");
 });
