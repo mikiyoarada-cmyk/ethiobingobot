@@ -1,0 +1,30 @@
+<h2>Admin Panel</h2>
+<div id="users"></div>
+
+<script>
+async function load(){
+  const res = await fetch("/admin/list");
+  const data = await res.json();
+
+  document.getElementById("users").innerHTML =
+    data.map(u=>`
+      <div>
+        ${u.phone} - ${u.status}
+        <button onclick="approve('${u._id}')">Approve</button>
+        <button onclick="reject('${u._id}')">Reject</button>
+      </div>
+    `).join("");
+}
+
+async function approve(id){
+  await fetch("/admin/approve/"+id,{method:"POST"});
+  load();
+}
+
+async function reject(id){
+  await fetch("/admin/reject/"+id,{method:"POST"});
+  load();
+}
+
+load();
+</script>

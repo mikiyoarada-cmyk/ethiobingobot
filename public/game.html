@@ -1,52 +1,40 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <style>
-    .card {
-      border: 2px solid black;
-      margin: 6px;
-      padding: 6px;
-      display: inline-block;
-      width: 160px;
-      font-size: 12px;
-    }
-
-    .cell {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      text-align: center;
-      margin: 1px;
-    }
-
-    .hit {
-      background: green;
-      color: white;
-    }
-
-    #cards {
-      display: flex;
-      flex-wrap: wrap;
-    }
-  </style>
+<style>
+.card { border:1px solid black; margin:5px; padding:5px; display:inline-block }
+.cell { width:22px; height:22px; display:inline-block; text-align:center }
+.hit { background:green; color:white; }
+</style>
 </head>
 
 <body>
 
-<h1>Bingo Live</h1>
+<h1>B I N G O GAME</h1>
 
-<button onclick="start()">Start Game</button>
+<!-- PAYMENT -->
+<div>
+  <h3>Enter Payment</h3>
+  <input id="phone" placeholder="Phone">
+  <input id="tx" placeholder="Transaction ID">
+  <button onclick="pay()">Submit</button>
+  <p id="status"></p>
+</div>
+
+<hr>
+
+<button onclick="start()">START GAME</button>
 
 <h2 id="num">-</h2>
 
-<h3>Called Numbers:</h3>
+<h3>Called Numbers</h3>
 <div id="history"></div>
 
-<h3>🏆 Winner:</h3>
-<div id="winner"></div>
-
-<h3>Cartelas (600)</h3>
+<h3>Cards (600)</h3>
 <div id="cards"></div>
+
+<h3>Winner</h3>
+<div id="winner"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
@@ -54,75 +42,158 @@ const socket = io();
 
 let called = [];
 let queue = [];
-let playing = false;
 let cards = [];
+let playing = false;
+let allowed = false;
 
-// PREFIX
-function getPrefix(num) {
-  if (num <= 15) return "B";
-  if (num <= 30) return "I";
-  if (num <= 45) return "N";
-  if (num <= 60) return "G";
-  return "O";
+/* ======================
+   PAYMENT CHECK
+====================== */
+async function pay() {
+  const phone = document.getElementById("phone").value;
+  const tx = document.getElementById("tx").value;
+
+  await fetch("/pay", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ phone, transactionId: tx })
+  });
+
+  document.getElementById("status").innerText =
+    "Sent! waiting approval";
 }
 
-// CHECK WINNER
-function checkCardWin(card) {
-  for (let r = 0; r < 5; r++) {
-    let win = true;
+/* ======================
+   PREFIX B I N G O
+====================== */
+function colRange(col) {
+  const start = col * 15 + 1;
+  return Array.from({length:15}, (_,i)=>start+i);
+}
+
+/* ======================
+   GENERATE 600 CARDS
+====================== */
+function generateCards() {
+  for (let i = 1; i <= 600; i++) {
+
+    let card = [];
+
     for (let c = 0; c < 5; c++) {
-      if (!called.includes(card.data[r][c])) {
-        win = false;
-        break;
+      let colNums = colRange(c);
+
+      let col = [];
+
+      for (let r = 0; r < 5; r++) {
+        col.push(colNums[Math.floor(Math.random()*15)]);
       }
+
+      card.push(col);
     }
-    if (win) return true;
+
+    cards.push({ id:i, data:card, won:false });
   }
-  return false;
+
+  render();
 }
 
-// PLAY QUEUE
-async function playQueue() {
-  if (playing || queue.length === 0) return;
+/* ======================
+   RENDER CARDS
+====================== */
+function render() {
+  let html = "";
+
+  cards.forEach(card => {
+    html += `<div class="card"><b>${card.id}</b><br>`;
+
+    for (let r=0;r<5;r++){
+      for (let c=0;c<5;c++){
+        html += `<span class="cell" id="c-${card.id}-${r}-${c}">
+          ${card.data[c][r]}
+        </span>`;
+      }
+      html += "<br>";
+    }
+
+    html += "</div>";
+  });
+
+  document.getElementById("cards").innerHTML = html;
+}
+
+/* ======================
+   CHECK ACCESS
+====================== */
+async function start() {
+  const phone = document.getElementById("phone").value;
+
+  const res = await fetch("/check", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ phone })
+  });
+
+  const data = await res.json();
+
+  if (!data.ok) {
+    alert("Not approved / expired");
+    return;
+  }
+
+  allowed = true;
+  socket.emit("start");
+}
+
+/* ======================
+   PLAY QUEUE
+====================== */
+socket.on("number", async (num) => {
+
+  queue.push(num);
+  if (playing) return;
 
   playing = true;
 
-  const num = queue.shift();
-  const prefix = getPrefix(num);
+  while(queue.length) {
+    const n = queue.shift();
+    const prefix = getPrefix(n);
 
-  document.getElementById('num').innerText = prefix + "-" + num;
+    document.getElementById("num").innerText = prefix + "-" + n;
+    called.push(n);
 
-  called.push(num);
+    document.getElementById("history").innerText =
+      called.join(",");
 
-  document.getElementById('history').innerText =
-    called.map(n => getPrefix(n) + "-" + n).join(', ');
+    highlight();
 
-  // highlight cards
-  highlightCards();
+    let audio = new Audio(`voices/${prefix}${n}.mp3`);
+    await audio.play().catch(()=>{});
+    await new Promise(r => audio.onended = r);
 
-  // winner check
-  checkWinner();
-
-  let audio = new Audio(`voices/${prefix}${num}.mp3`);
-
-  try { await audio.play(); } catch(e) {}
-
-  await new Promise(r => audio.onended = r);
-
-  await new Promise(r => setTimeout(r, 3000));
+    await new Promise(r => setTimeout(r, 3000));
+  }
 
   playing = false;
-  playQueue();
+});
+
+function getPrefix(n){
+  if(n<=15)return"B";
+  if(n<=30)return"I";
+  if(n<=45)return"N";
+  if(n<=60)return"G";
+  return"O";
 }
 
-// HIGHLIGHT NUMBERS
-function highlightCards() {
-  cards.forEach(card => {
-    for (let r = 0; r < 5; r++) {
-      for (let c = 0; c < 5; c++) {
-        const val = card.data[r][c];
-        const el = document.getElementById(`c-${card.id}-${r}-${c}`);
-        if (called.includes(val)) {
+/* ======================
+   HIGHLIGHT
+====================== */
+function highlight(){
+  cards.forEach(card=>{
+    for(let c=0;c<5;c++){
+      for(let r=0;r<5;r++){
+        let val = card.data[c][r];
+        let el = document.getElementById(`c-${card.id}-${r}-${c}`);
+        if(called.includes(val)){
           el.classList.add("hit");
         }
       }
@@ -130,90 +201,17 @@ function highlightCards() {
   });
 }
 
-// WINNER CHECK
-function checkWinner() {
-  cards.forEach(card => {
-    if (!card.won && checkCardWin(card)) {
-      card.won = true;
-      socket.emit("winner", card.id);
-    }
-  });
-}
-
-// GENERATE CARDS
-function generateCards() {
-  for (let i = 1; i <= 600; i++) {
-    let card = [];
-
-    for (let r = 0; r < 5; r++) {
-      let row = [];
-      for (let c = 0; c < 5; c++) {
-        row.push(Math.floor(Math.random() * 75) + 1);
-      }
-      card.push(row);
-    }
-
-    cards.push({ id: i, data: card, won: false });
-  }
-
-  renderCards();
-}
-
-// RENDER
-function renderCards() {
-  let html = "";
-
-  cards.forEach(c => {
-    html += `<div class="card">
-      <b>Card ${c.id}</b><br>`;
-
-    for (let r = 0; r < 5; r++) {
-      for (let c2 = 0; c2 < 5; c2++) {
-        html += `<span class="cell" id="c-${c.id}-${r}-${c2}">
-          ${c.data[r][c2]}
-        </span>`;
-      }
-      html += "<br>";
-    }
-
-    html += `</div>`;
-  });
-
-  document.getElementById('cards').innerHTML = html;
-}
-
-// START GAME
-socket.on('start', async () => {
-  called = [];
-  queue = [];
-  document.getElementById('history').innerText = "";
-  document.getElementById('winner').innerText = "";
-
-  if (cards.length === 0) generateCards();
-
-  let startAudio = new Audio("voices/start.mp3");
-  await startAudio.play();
-  await new Promise(r => startAudio.onended = r);
-
-  playQueue();
+socket.on("start", ()=>{
+  called=[];
+  queue=[];
+  document.getElementById("winner").innerText="";
 });
 
-// RECEIVE NUMBERS
-socket.on('number', (num) => {
-  queue.push(num);
-  playQueue();
+socket.on("winner",(id)=>{
+  document.getElementById("winner").innerText="🏆 Card "+id+" WIN!";
 });
 
-// WINNER EVENT
-socket.on("winner", (id) => {
-  document.getElementById("winner").innerText =
-    "🏆 Card " + id + " WINS!";
-});
-
-// START BUTTON
-function start() {
-  socket.emit('start');
-}
+generateCards();
 </script>
 
 </body>
