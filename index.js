@@ -5,7 +5,6 @@ const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const path = require("path");
-const TelegramBot = require("node-telegram-bot-api");
 
 const app = express();
 const server = http.createServer(app);
@@ -15,77 +14,61 @@ app.use(express.json());
 app.use(express.static("public"));
 
 /* =======================
-   MONGO CONNECT
+   MONGO
 ======================= */
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
   .catch(err => console.log("Mongo error:", err));
 
 /* =======================
-   MODELS
+   USER MODEL (FREE SYSTEM)
 ======================= */
 const userSchema = new mongoose.Schema({
   phone: String,
-  transactionId: String,
   cartela: Array,
-  status: { type: String, default: "pending" },
-  expiresAt: Date,
+  status: { type: String, default: "active" },
   createdAt: { type: Date, default: Date.now }
 });
 
 const User = mongoose.model("User", userSchema);
 
 /* =======================
-   TELEGRAM BOT
+   ADMIN PAGE FIX (CRITICAL)
 ======================= */
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
-
-/* =======================
-   ADMIN APPROVAL BUTTONS
-======================= */
-async function sendApproval(user) {
-  bot.sendMessage(
-    process.env.ADMIN_CHAT_ID,
-    `🎯 New User\nPhone: ${user.phone}\nTX: ${user.transactionId}`,
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "✅ Approve", callback_data: `approve_${user._id}` },
-            { text: "❌ Reject", callback_data: `reject_${user._id}` }
-          ]
-        ]
-      }
-    }
-  );
-}
-
-bot.on("callback_query", async (query) => {
-  const data = query.data;
-
-  if (data.startsWith("approve_")) {
-    const id = data.split("_")[1];
-
-    const user = await User.findById(id);
-
-    user.status = "approved";
-    user.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    await user.save();
-
-    bot.sendMessage(query.message.chat.id, "✅ Approved");
-  }
-
-  if (data.startsWith("reject_")) {
-    const id = data.split("_")[1];
-
-    await User.findByIdAndUpdate(id, { status: "rejected" });
-
-    bot.sendMessage(query.message.chat.id, "❌ Rejected");
-  }
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/admin.html"));
 });
 
 /* =======================
-   UNIQUE CARTELA GENERATOR
+   CREATE USER (NO BALANCE SYSTEM)
+======================= */
+app.post("/register", async (req, res) => {
+  const { phone } = req.body;
+
+  const exists = await User.findOne({ phone });
+  if (exists) return res.json({ ok: true, user: exists });
+
+  const cartela = generateCartela();
+
+  const user = await User.create({
+    phone,
+    cartela,
+    status: "active"
+  });
+
+  res.json({ ok: true, user });
+});
+
+/* =======================
+   GET USERS (ADMIN)
+======================= */
+app.get("/admin/list", async (req, res) => {
+  const users = await User.find().sort({ createdAt: -1 });
+  res.json(users);
+});
+
+/* =======================
+   CARTELA GENERATOR
 ======================= */
 function generateCartela() {
   let card = [];
@@ -100,88 +83,50 @@ function generateCartela() {
 }
 
 /* =======================
-   PAY / REGISTER USER
-======================= */
-app.post("/pay", async (req, res) => {
-  const { phone, transactionId } = req.body;
-
-  const exists = await User.findOne({ transactionId });
-  if (exists) return res.json({ ok: false });
-
-  const user = await User.create({
-    phone,
-    transactionId,
-    cartela: generateCartela(),
-    status: "pending"
-  });
-
-  sendApproval(user);
-
-  res.json({ ok: true, msg: "Sent to admin bot" });
-});
-
-/* =======================
-   ADMIN LIST
-======================= */
-app.get("/admin/list", async (req, res) => {
-  const users = await User.find();
-  res.json(users);
-});
-
-/* =======================
-   ANALYTICS DASHBOARD API
-======================= */
-app.get("/admin/stats", async (req, res) => {
-  const total = await User.countDocuments();
-  const approved = await User.countDocuments({ status: "approved" });
-  const pending = await User.countDocuments({ status: "pending" });
-  const rejected = await User.countDocuments({ status: "rejected" });
-
-  res.json({ total, approved, pending, rejected });
-});
-
-/* =======================
-   WINNER SYSTEM
+   GAME SYSTEM (40 SEC START)
 ======================= */
 let numbers = [];
 let interval;
-
-function checkWinner() {
-  // simple demo winner logic
-  const users = User.find({ status: "approved" });
-  return users;
-}
-
-app.post("/winner", async (req, res) => {
-  const { userId } = req.body;
-
-  const user = await User.findById(userId);
-
-  if (!user) return res.json({ ok: false });
-
-  user.status = "winner";
-  await user.save();
-
-  io.emit("winner", userId);
-
-  res.json({ ok: true });
-});
+let countdown;
 
 /* =======================
-   SOCKET BINGO GAME
+   SOCKET
 ======================= */
 io.on("connection", (socket) => {
 
-  socket.on("start", () => {
+  console.log("User connected");
+
+  /* ADMIN START GAME */
+  socket.on("startGame", () => {
 
     numbers = [];
-    io.emit("start");
 
-    if (interval) clearInterval(interval);
+    io.emit("countdown", 40);
+
+    let time = 40;
+
+    countdown = setInterval(() => {
+
+      time--;
+      io.emit("countdown", time);
+
+      if (time <= 0) {
+        clearInterval(countdown);
+        startGame();
+      }
+
+    }, 1000);
+
+  });
+
+  function startGame() {
+
+    io.emit("start");
 
     interval = setInterval(() => {
 
       const num = Math.floor(Math.random() * 75) + 1;
+
       numbers.push(num);
 
       io.emit("number", num);
@@ -192,6 +137,10 @@ io.on("connection", (socket) => {
 
     }, 4000);
 
+  }
+
+  socket.on("winner", (id) => {
+    io.emit("winner", id);
   });
 
 });
@@ -199,6 +148,8 @@ io.on("connection", (socket) => {
 /* =======================
    SERVER
 ======================= */
-server.listen(process.env.PORT || 10000, () => {
-  console.log("🚀 Bingo PRO V5 Running");
+const PORT = process.env.PORT || 10000;
+
+server.listen(PORT, () => {
+  console.log("🚀 Bingo Free System Running on", PORT);
 });

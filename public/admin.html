@@ -1,13 +1,15 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Admin Bingo</title>
+  <title>Bingo Admin</title>
 </head>
 <body>
 
 <h2>Admin Panel</h2>
 
 <button onclick="startGame()">▶ Start Game (40s)</button>
+
+<h3 id="countdown">40</h3>
 
 <div id="users"></div>
 
@@ -18,32 +20,25 @@ const socket = io();
 /* LOAD USERS */
 async function load() {
   const res = await fetch("/admin/list");
-  const data = await res.json();
+  const users = await res.json();
 
   document.getElementById("users").innerHTML =
-    data.map(u => `
-      <div>
-        ${u.phone} - ${u.status}
-        <button onclick="approve('${u._id}')">Approve</button>
-        <button onclick="reject('${u._id}')">Reject</button>
+    users.map(u => `
+      <div style="border:1px solid #000;padding:5px;margin:5px">
+        📞 ${u.phone}
+        <br>
+        <b>Cartela:</b> ${JSON.stringify(u.cartela)}
       </div>
     `).join("");
 }
 
-async function approve(id) {
-  await fetch("/admin/approve/" + id, { method: "POST" });
-  load();
-}
-
-async function reject(id) {
-  await fetch("/admin/reject/" + id, { method: "POST" });
-  load();
-}
-
-/* START GAME */
 function startGame() {
   socket.emit("startGame");
 }
+
+socket.on("countdown", (t) => {
+  document.getElementById("countdown").innerText = t;
+});
 
 load();
 </script>
