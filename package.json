@@ -6,9 +6,24 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.1",
+    "express": "^4.22.1",
     "mongoose": "^8.0.0",
-    "socket.io": "^4.7.5",
-    "node-telegram-bot-api": "^0.66.0"
-  }
+    "node-telegram-bot-api": "^0.66.0",
+    "socket.io": "^4.8.3"
+  },
+  "description": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mikiyoarada-cmyk/ethiobingobot.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/mikiyoarada-cmyk/ethiobingobot/issues"
+  },
+  "homepage": "https://github.com/mikiyoarada-cmyk/ethiobingobot#readme"
 }

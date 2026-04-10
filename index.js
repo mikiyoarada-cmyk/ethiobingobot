@@ -1,131 +1,171 @@
-const express = require('express');
-const http = require('http');
-const path = require('path');
-const mongoose = require('mongoose');
-const { Server } = require('socket.io');
-const TelegramBot = require('node-telegram-bot-api');
+const express = require("express");
+const http = require("http");
+const socketIo = require("socket.io");
+const cors = require("cors");
+require("dotenv").config();
+const TelegramBot = require("node-telegram-bot-api");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = socketIo(server);
 
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(cors());
+app.use(express.static("public"));
 
-// ===== ENV =====
-const MONGO = process.env.MONGO_URI;
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
-const URL = process.env.RENDER_EXTERNAL_URL;
+const ADMIN_ID = process.env.ADMIN_ID;
 
-// ===== DB =====
-mongoose.connect(MONGO)
-  .then(() => console.log("MongoDB connected"))
-  .catch(err => console.log(err));
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-// ===== TELEGRAM (WEBHOOK ONLY) =====
-const bot = new TelegramBot(BOT_TOKEN);
-
-bot.setWebHook(`${URL}/bot${BOT_TOKEN}`);
-
-app.post(`/bot${BOT_TOKEN}`, (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
-
-// ===== MODELS =====
-const User = mongoose.model('User', new mongoose.Schema({
-  name: String,
-  txId: String,
-  approved: Boolean,
-  expireAt: Date
-}));
-
-// ===== TELEGRAM COMMANDS =====
-bot.onText(/\/approve (.+)/, async (msg, match) => {
-  const userId = match[1];
-
-  const expire = new Date();
-  expire.setDate(expire.getDate() + 30);
-
-  await User.findByIdAndUpdate(userId, {
-    approved: true,
-    expireAt: expire
-  });
-
-  bot.sendMessage(msg.chat.id, "✅ Approved 30 days");
-});
-
-bot.onText(/\/reject (.+)/, async (msg, match) => {
-  const userId = match[1];
-  await User.findByIdAndDelete(userId);
-  bot.sendMessage(msg.chat.id, "❌ Rejected");
-});
-
-// ===== GAME STATE =====
-let called = [];
-let running = false;
+// ===================== GAME STATE =====================
+let calledNumbers = [];
 let interval = null;
 
-// ===== SOCKET =====
-io.on('connection', (socket) => {
+let users = {}; 
+// { telegramId: { paid: true, card: [], socketId } }
 
-  socket.emit('state', { called });
+let cards = []; // 600 cards pool
 
-  socket.on('start', () => {
+// ===================== GENERATE BINGO CARDS =====================
+function generateCard() {
+  const card = [];
+  const used = new Set();
 
-    if (running) return;
+  while (card.length < 25) {
+    const num = Math.floor(Math.random() * 75) + 1;
+    if (!used.has(num)) {
+      used.add(num);
+      card.push(num);
+    }
+  }
+  return card;
+}
 
-    running = true;
-    called = [];
+function generate600Cards() {
+  cards = [];
+  for (let i = 0; i < 600; i++) {
+    cards.push(generateCard());
+  }
+}
 
-    io.emit('start');
+generate600Cards();
 
-    if (interval) clearInterval(interval);
+// ===================== NUMBER CALLER =====================
+function startCaller() {
+  if (interval) return;
 
-    interval = setInterval(() => {
+  interval = setInterval(() => {
+    let num;
+    do {
+      num = Math.floor(Math.random() * 75) + 1;
+    } while (calledNumbers.includes(num));
 
-      let num;
+    calledNumbers.push(num);
 
-      do {
-        num = Math.floor(Math.random() * 75) + 1;
-      } while (called.includes(num));
+    io.emit("numberCalled", {
+      number: num,
+      calledNumbers
+    });
 
-      called.push(num);
+    checkWinners();
+  }, 3000); // 🔊 every 3 seconds
+}
 
-      console.log("CALL:", num);
+// ===================== WIN CHECK =====================
+function checkWin(card) {
+  const grid = [
+    card.slice(0, 5),
+    card.slice(5, 10),
+    card.slice(10, 15),
+    card.slice(15, 20),
+    card.slice(20, 25),
+  ];
 
-      io.emit('number', num);
+  // row win
+  for (let row of grid) {
+    if (row.every(n => calledNumbers.includes(n))) return true;
+  }
 
-      if (called.length >= 75) {
-        clearInterval(interval);
-        running = false;
-      }
+  // column win
+  for (let c = 0; c < 5; c++) {
+    let col = [];
+    for (let r = 0; r < 5; r++) {
+      col.push(grid[r][c]);
+    }
+    if (col.every(n => calledNumbers.includes(n))) return true;
+  }
 
-    }, 4000); // safe timing
+  return false;
+}
 
+function checkWinners() {
+  for (let id in users) {
+    const user = users[id];
+    if (user.paid && user.card && checkWin(user.card)) {
+      io.emit("winner", {
+        userId: id,
+        card: user.card
+      });
+
+      bot.sendMessage(id, "🏆 YOU WIN THE BINGO!");
+      clearInterval(interval);
+      interval = null;
+    }
+  }
+}
+
+// ===================== SOCKET =====================
+io.on("connection", (socket) => {
+  socket.emit("init", { calledNumbers });
+
+  socket.on("register", ({ telegramId }) => {
+    if (!users[telegramId]) {
+      const card = cards.pop();
+      users[telegramId] = {
+        paid: false,
+        card,
+        socketId: socket.id
+      };
+    }
+
+    socket.emit("card", users[telegramId].card);
   });
-
 });
 
-// ===== PAYMENT =====
-app.post('/pay', async (req, res) => {
-  const { userId, txId } = req.body;
+// ===================== TELEGRAM BOT =====================
+bot.onText(/\/start/, (msg) => {
+  bot.sendMessage(msg.chat.id, 
+`🎱 Bingo Game Started!
 
-  await User.findByIdAndUpdate(userId, { txId });
+💰 Pay to join:
+Once approved you can play.
 
-  bot.sendMessage(ADMIN_CHAT_ID,
-    `💰 Payment\nUser: ${userId}\nTX: ${txId}\n\n/approve ${userId}\n/reject ${userId}`
+Use /pay to request approval`);
+});
+
+bot.onText(/\/pay/, (msg) => {
+  const id = msg.chat.id;
+
+  bot.sendMessage(ADMIN_ID,
+    `💰 PAYMENT REQUEST\nUser: ${id}\nApprove: /approve ${id}`
   );
 
-  res.json({ msg: "Sent for approval" });
+  bot.sendMessage(id, "⏳ Waiting for approval...");
 });
 
-// ===== ROOT =====
-app.get('/', (req, res) => {
-  res.send("✅ Server running");
+bot.onText(/\/approve (.+)/, (msg, match) => {
+  if (msg.chat.id != ADMIN_ID) return;
+
+  const id = match[1];
+  if (!users[id]) users[id] = {};
+
+  users[id].paid = true;
+
+  bot.sendMessage(id, "✅ Payment approved! You can now play.");
 });
 
-// ===== SERVER =====
-const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => console.log("Running on " + PORT));
+// ===================== START =====================
+server.listen(process.env.PORT, () => {
+  console.log("🚀 Server running on port", process.env.PORT);
+  startCaller();
+});

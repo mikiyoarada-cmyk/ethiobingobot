@@ -1,24 +1,66 @@
 <!DOCTYPE html>
 <html>
+<head>
+  <title>Bingo Game</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { font-family: Arial; text-align:center; background:#111; color:#fff; }
+    .grid { display:grid; grid-template-columns:repeat(5,60px); gap:5px; justify-content:center; margin-top:20px; }
+    .cell {
+      width:60px;height:60px;
+      display:flex;align-items:center;justify-content:center;
+      background:#333;border-radius:8px;
+    }
+    .active { background:green; }
+    .calledBox { font-size:30px; margin-top:20px; }
+  </style>
+</head>
 <body>
 
-<h1>Join Bingo</h1>
+<h1>🎱 Bingo Game</h1>
+<div class="calledBox" id="last">Waiting...</div>
 
-<input id="name" placeholder="Name">
-<button onclick="join()">Join</button>
+<div class="grid" id="grid"></div>
 
 <script>
-async function join(){
-  let res = await fetch('/join',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({name:document.getElementById('name').value})
+const socket = io();
+let card = [];
+let called = [];
+
+const telegramId = prompt("Enter your Telegram ID");
+
+socket.emit("register", { telegramId });
+
+socket.on("card", (data) => {
+  card = data;
+  renderCard();
+});
+
+socket.on("numberCalled", (data) => {
+  called = data.calledNumbers;
+  document.getElementById("last").innerText = "Called: " + data.number;
+  renderCard();
+});
+
+socket.on("winner", (data) => {
+  alert("🏆 WINNER DETECTED!");
+});
+
+function renderCard() {
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+
+  card.forEach(num => {
+    const div = document.createElement("div");
+    div.className = "cell";
+
+    if (called.includes(num)) {
+      div.classList.add("active");
+    }
+
+    div.innerText = num;
+    grid.appendChild(div);
   });
-
-  let data = await res.json();
-  localStorage.userId = data._id;
-
-  window.location="game.html";
 }
 </script>
 
