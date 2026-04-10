@@ -1,78 +1,52 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Bingo Admin Dashboard</title>
+  <title>Admin Panel</title>
 
   <style>
-    body {
-      font-family: Arial;
-      background: #111;
-      color: white;
-      padding: 20px;
-    }
-
-    .user {
-      background: #222;
-      padding: 10px;
-      margin: 10px 0;
-      border-radius: 8px;
-    }
-
-    button {
-      margin: 5px;
-      padding: 8px 12px;
-      cursor: pointer;
-    }
-
-    .approve { background: green; color: white; }
-    .reject { background: red; color: white; }
-    .pending { color: orange; }
-    .approved { color: lime; }
+    body { font-family: Arial; padding: 20px; }
+    .user { border:1px solid #ccc; padding:10px; margin:10px; }
+    button { margin:5px; padding:5px 10px; }
   </style>
 </head>
 
 <body>
 
-<h1>🎯 Bingo Admin Dashboard</h1>
+<h2>Admin Dashboard</h2>
 
-<button onclick="loadUsers()">🔄 Refresh</button>
+<button onclick="load()">Refresh</button>
 
 <div id="users"></div>
 
 <script>
-async function loadUsers() {
+async function load() {
   const res = await fetch("/admin/list");
   const data = await res.json();
 
-  let html = "";
-
-  data.forEach(u => {
-    html += `
+  document.getElementById("users").innerHTML =
+    data.map(u => `
       <div class="user">
-        <b>Phone:</b> ${u.phone} <br>
-        <b>Transaction:</b> ${u.transactionId} <br>
-        <b>Status:</b> <span class="${u.status}">${u.status}</span> <br>
+        <b>${u.phone}</b><br>
+        ${u.transactionId}<br>
+        Status: ${u.status}<br>
 
-        <button class="approve" onclick="approve('${u._id}')">Approve</button>
-        <button class="reject" onclick="reject('${u._id}')">Reject</button>
+        <button onclick="approve('${u._id}')">Approve</button>
+        <button onclick="reject('${u._id}')">Reject</button>
       </div>
-    `;
-  });
-
-  document.getElementById("users").innerHTML = html;
+    `).join("");
 }
 
 async function approve(id) {
   await fetch("/admin/approve/" + id, { method: "POST" });
-  loadUsers();
+  load();
 }
 
 async function reject(id) {
   await fetch("/admin/reject/" + id, { method: "POST" });
-  loadUsers();
+  load();
 }
 
-loadUsers();
+load();
 </script>
 
 </body>
