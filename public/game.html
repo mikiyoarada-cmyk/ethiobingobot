@@ -3,24 +3,56 @@
 <body>
 
 <h1>Bingo Live</h1>
-<button onclick="start()">Start</button>
 
-<h2 id="num"></h2>
+<button onclick="start()">Start Game</button>
+
+<h2 id="num">-</h2>
+
+<h3>Called Numbers:</h3>
+<div id="history"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
 
-socket.on('start', ()=>{
-  new Audio("voices/start.mp3").play();
+let called = [];
+let currentAudio = null;
+
+// 🔊 PLAY AUDIO (FIXED)
+function playSound(file) {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+  }
+  currentAudio = new Audio(file);
+  currentAudio.play();
+}
+
+// GAME START
+socket.on('start', () => {
+  called = [];
+  document.getElementById('history').innerText = "";
+  playSound("voices/start.mp3");
 });
 
-socket.on('number', (num)=>{
+// NUMBER RECEIVED
+socket.on('number', (num) => {
+
+  // update main number
   document.getElementById('num').innerText = num;
-  new Audio("voices/B"+num+".mp3").play();
+
+  // save history
+  called.push(num);
+
+  // show all numbers
+  document.getElementById('history').innerText = called.join(', ');
+
+  // 🔊 MATCHED VOICE
+  playSound("voices/B" + num + ".mp3");
 });
 
-function start(){
+// START BUTTON
+function start() {
   socket.emit('start');
 }
 </script>
