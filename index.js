@@ -14,7 +14,7 @@ app.use(express.json());
 app.use(express.static("public"));
 
 /* =======================
-   MONGO
+   MONGO CONNECT
 ======================= */
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
@@ -32,35 +32,34 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.model("User", userSchema);
 
 /* =======================
-   TELEGRAM WEBHOOK FIX
+   TELEGRAM WEBHOOK (FIX 404)
 ======================= */
 app.post(`/bot${process.env.BOT_TOKEN}`, async (req, res) => {
   try {
     const update = req.body;
 
-    // handle messages
     if (update.message) {
       const chatId = update.message.chat.id;
       const text = update.message.text;
 
-      console.log("Telegram:", text);
+      console.log("Telegram message:", text);
 
-      // simple reply
+      // simple bot response system
       if (text === "/start") {
-        return res.json({ ok: true });
+        console.log("User started bot");
       }
     }
 
     res.json({ ok: true });
 
-  } catch (e) {
-    console.log(e);
+  } catch (err) {
+    console.log(err);
     res.status(200).end();
   }
 });
 
 /* =======================
-   REGISTER
+   REGISTER USER
 ======================= */
 app.post("/register", async (req, res) => {
   const { phone } = req.body;
@@ -75,7 +74,7 @@ app.post("/register", async (req, res) => {
 });
 
 /* =======================
-   BALANCE
+   GET BALANCE
 ======================= */
 app.get("/balance/:phone", async (req, res) => {
   const user = await User.findOne({ phone: req.params.phone });
@@ -83,7 +82,7 @@ app.get("/balance/:phone", async (req, res) => {
 });
 
 /* =======================
-   DEPOSIT
+   DEPOSIT (SIMULATION)
 ======================= */
 app.post("/deposit", async (req, res) => {
   const { phone, amount } = req.body;
@@ -128,6 +127,13 @@ app.post("/join", async (req, res) => {
 });
 
 /* =======================
+   ADMIN PAGE FIX
+======================= */
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/admin.html"));
+});
+
+/* =======================
    SOCKET GAME
 ======================= */
 let interval;
@@ -154,7 +160,7 @@ io.on("connection", (socket) => {
 
   function startGame() {
 
-    io.emit("start");
+    io.emit("gameStart");
 
     let numbers = [];
 
@@ -163,7 +169,6 @@ io.on("connection", (socket) => {
       const num = Math.floor(Math.random() * 75) + 1;
 
       numbers.push(num);
-
       io.emit("number", num);
 
       if (numbers.length >= 75) {
@@ -177,15 +182,8 @@ io.on("connection", (socket) => {
 });
 
 /* =======================
-   ADMIN PAGE
-======================= */
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/admin.html"));
-});
-
-/* =======================
-   SERVER
+   SERVER START
 ======================= */
 server.listen(process.env.PORT || 10000, () => {
-  console.log("🚀 Bot + Bingo Running");
+  console.log("🚀 Bingo system running");
 });
