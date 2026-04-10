@@ -14,7 +14,7 @@ app.use(express.json());
 app.use(express.static("public"));
 
 /* =======================
-   DB
+   MONGO
 ======================= */
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
@@ -30,6 +30,34 @@ const userSchema = new mongoose.Schema({
 });
 
 const User = mongoose.model("User", userSchema);
+
+/* =======================
+   TELEGRAM WEBHOOK FIX
+======================= */
+app.post(`/bot${process.env.BOT_TOKEN}`, async (req, res) => {
+  try {
+    const update = req.body;
+
+    // handle messages
+    if (update.message) {
+      const chatId = update.message.chat.id;
+      const text = update.message.text;
+
+      console.log("Telegram:", text);
+
+      // simple reply
+      if (text === "/start") {
+        return res.json({ ok: true });
+      }
+    }
+
+    res.json({ ok: true });
+
+  } catch (e) {
+    console.log(e);
+    res.status(200).end();
+  }
+});
 
 /* =======================
    REGISTER
@@ -51,12 +79,11 @@ app.post("/register", async (req, res) => {
 ======================= */
 app.get("/balance/:phone", async (req, res) => {
   const user = await User.findOne({ phone: req.params.phone });
-
   res.json({ balance: user ? user.balance : 0 });
 });
 
 /* =======================
-   DEPOSIT (SIMULATION)
+   DEPOSIT
 ======================= */
 app.post("/deposit", async (req, res) => {
   const { phone, amount } = req.body;
@@ -71,7 +98,7 @@ app.post("/deposit", async (req, res) => {
 });
 
 /* =======================
-   BUY / JOIN GAME
+   CARTELA
 ======================= */
 function generateCartela() {
   return Array.from({ length: 5 }, () =>
@@ -79,6 +106,9 @@ function generateCartela() {
   );
 }
 
+/* =======================
+   JOIN GAME
+======================= */
 app.post("/join", async (req, res) => {
   const { phone } = req.body;
 
@@ -91,6 +121,7 @@ app.post("/join", async (req, res) => {
 
   user.balance -= 10;
   user.cartela = generateCartela();
+
   await user.save();
 
   res.json({ ok: true, cartela: user.cartela, balance: user.balance });
@@ -123,14 +154,16 @@ io.on("connection", (socket) => {
 
   function startGame() {
 
-    io.emit("gameStart");
+    io.emit("start");
 
     let numbers = [];
 
     interval = setInterval(() => {
+
       const num = Math.floor(Math.random() * 75) + 1;
 
       numbers.push(num);
+
       io.emit("number", num);
 
       if (numbers.length >= 75) {
@@ -138,13 +171,21 @@ io.on("connection", (socket) => {
       }
 
     }, 4000);
-  }
 
-  socket.on("winner", (phone) => {
-    io.emit("winner", phone);
-    clearInterval(interval);
-  });
+  }
 
 });
 
-server.listen(10000, () => console.log("Server running"));
+/* =======================
+   ADMIN PAGE
+======================= */
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/admin.html"));
+});
+
+/* =======================
+   SERVER
+======================= */
+server.listen(process.env.PORT || 10000, () => {
+  console.log("🚀 Bot + Bingo Running");
+});
