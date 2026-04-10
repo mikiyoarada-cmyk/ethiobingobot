@@ -19,58 +19,72 @@ let called = [];
 let queue = [];
 let playing = false;
 
-// 🔊 PLAY NEXT SOUND (SEQUENTIAL)
+// 🎯 GET PREFIX (B I N G O)
+function getPrefix(num) {
+  if (num <= 15) return "B";
+  if (num <= 30) return "I";
+  if (num <= 45) return "N";
+  if (num <= 60) return "G";
+  return "O";
+}
+
+// 🔊 PLAY QUEUE (PERFECT SYNC)
 async function playQueue() {
   if (playing || queue.length === 0) return;
 
   playing = true;
 
   const num = queue.shift();
+  const prefix = getPrefix(num);
 
   // show number
-  document.getElementById('num').innerText = num;
+  document.getElementById('num').innerText = prefix + "-" + num;
 
   // save history
   called.push(num);
-  document.getElementById('history').innerText = called.join(', ');
+  document.getElementById('history').innerText =
+    called.map(n => getPrefix(n) + "-" + n).join(', ');
 
-  // play audio
-  let audio = new Audio("voices/B" + num + ".mp3");
+  // 🔊 CORRECT AUDIO FILE
+  let audio = new Audio(`voices/${prefix}${num}.mp3`);
 
-  audio.play();
+  try {
+    await audio.play();
+  } catch (e) {
+    console.log("Audio error:", e);
+  }
 
-  // WAIT until audio finishes
+  // wait until audio ends
   await new Promise(resolve => {
     audio.onended = resolve;
   });
 
-  // WAIT 5 seconds AFTER sound
+  // wait 5 seconds after voice
   await new Promise(r => setTimeout(r, 5000));
 
   playing = false;
 
-  // play next in queue
+  // next number
   playQueue();
 }
 
-// GAME START
+// START GAME
 socket.on('start', async () => {
   called = [];
   queue = [];
   document.getElementById('history').innerText = "";
 
-  // play start voice
   let startAudio = new Audio("voices/start.mp3");
-  startAudio.play();
+
+  try {
+    await startAudio.play();
+  } catch (e) {}
 
   await new Promise(resolve => {
     startAudio.onended = resolve;
   });
 
-  // small delay
-  setTimeout(() => {
-    playQueue();
-  }, 1000);
+  playQueue();
 });
 
 // RECEIVE NUMBER
@@ -79,7 +93,7 @@ socket.on('number', (num) => {
   playQueue();
 });
 
-// START BUTTON
+// BUTTON
 function start() {
   socket.emit('start');
 }
