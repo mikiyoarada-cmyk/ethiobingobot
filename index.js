@@ -102,7 +102,7 @@ io.on('connection', (socket) => {
         running = false;
       }
 
-    }, 8000); // safe timing
+    }, 4000); // safe timing
 
   });
 
