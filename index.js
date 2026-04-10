@@ -5,6 +5,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const path = require("path");
+const TelegramBot = require("node-telegram-bot-api");
 
 const app = express();
 const server = http.createServer(app);
@@ -14,19 +15,20 @@ app.use(express.json());
 app.use(express.static("public"));
 
 /* =======================
-   CONNECT MONGO
+   MONGO CONNECT
 ======================= */
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
   .catch(err => console.log("Mongo error:", err));
 
 /* =======================
-   USER MODEL
+   MODELS
 ======================= */
 const userSchema = new mongoose.Schema({
   phone: String,
   transactionId: String,
-  status: { type: String, default: "pending" }, 
+  cartela: Array,
+  status: { type: String, default: "pending" },
   expiresAt: Date,
   createdAt: { type: Date, default: Date.now }
 });
@@ -34,131 +36,140 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.model("User", userSchema);
 
 /* =======================
-   ADMIN PAGE ROUTE
+   TELEGRAM BOT
 ======================= */
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/admin.html"));
+const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+
+/* =======================
+   ADMIN APPROVAL BUTTONS
+======================= */
+async function sendApproval(user) {
+  bot.sendMessage(
+    process.env.ADMIN_CHAT_ID,
+    `🎯 New User\nPhone: ${user.phone}\nTX: ${user.transactionId}`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "✅ Approve", callback_data: `approve_${user._id}` },
+            { text: "❌ Reject", callback_data: `reject_${user._id}` }
+          ]
+        ]
+      }
+    }
+  );
+}
+
+bot.on("callback_query", async (query) => {
+  const data = query.data;
+
+  if (data.startsWith("approve_")) {
+    const id = data.split("_")[1];
+
+    const user = await User.findById(id);
+
+    user.status = "approved";
+    user.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await user.save();
+
+    bot.sendMessage(query.message.chat.id, "✅ Approved");
+  }
+
+  if (data.startsWith("reject_")) {
+    const id = data.split("_")[1];
+
+    await User.findByIdAndUpdate(id, { status: "rejected" });
+
+    bot.sendMessage(query.message.chat.id, "❌ Rejected");
+  }
 });
 
 /* =======================
-   AUTO TELEBIRR PAYMENT REQUEST
+   UNIQUE CARTELA GENERATOR
+======================= */
+function generateCartela() {
+  let card = [];
+  for (let i = 0; i < 5; i++) {
+    let row = [];
+    for (let j = 0; j < 5; j++) {
+      row.push(Math.floor(Math.random() * 75) + 1);
+    }
+    card.push(row);
+  }
+  return card;
+}
+
+/* =======================
+   PAY / REGISTER USER
 ======================= */
 app.post("/pay", async (req, res) => {
-  try {
-    const { phone, transactionId } = req.body;
+  const { phone, transactionId } = req.body;
 
-    if (!phone || !transactionId) {
-      return res.json({ ok: false, msg: "Missing data" });
-    }
+  const exists = await User.findOne({ transactionId });
+  if (exists) return res.json({ ok: false });
 
-    // duplicate check
-    const exists = await User.findOne({ transactionId });
-    if (exists) {
-      return res.json({ ok: false, msg: "Transaction already used" });
-    }
+  const user = await User.create({
+    phone,
+    transactionId,
+    cartela: generateCartela(),
+    status: "pending"
+  });
 
-    // SMART VALIDATION (fake verification logic)
-    const validFormat =
-      transactionId.length >= 6 &&
-      transactionId.length <= 30;
+  sendApproval(user);
 
-    if (!validFormat) {
-      return res.json({ ok: false, msg: "Invalid transaction ID" });
-    }
-
-    await User.create({
-      phone,
-      transactionId,
-      status: "pending_auto"
-    });
-
-    res.json({
-      ok: true,
-      msg: "Payment received, verifying automatically..."
-    });
-
-  } catch (err) {
-    res.json({ ok: false, msg: "Server error" });
-  }
+  res.json({ ok: true, msg: "Sent to admin bot" });
 });
 
 /* =======================
    ADMIN LIST
 ======================= */
 app.get("/admin/list", async (req, res) => {
-  const users = await User.find().sort({ createdAt: -1 });
+  const users = await User.find();
   res.json(users);
 });
 
 /* =======================
-   MANUAL APPROVE / REJECT
+   ANALYTICS DASHBOARD API
 ======================= */
-app.post("/admin/approve/:id", async (req, res) => {
-  const user = await User.findById(req.params.id);
+app.get("/admin/stats", async (req, res) => {
+  const total = await User.countDocuments();
+  const approved = await User.countDocuments({ status: "approved" });
+  const pending = await User.countDocuments({ status: "pending" });
+  const rejected = await User.countDocuments({ status: "rejected" });
 
-  if (!user) return res.json({ ok: false });
-
-  user.status = "approved";
-  user.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-  await user.save();
-
-  res.json({ ok: true });
-});
-
-app.post("/admin/reject/:id", async (req, res) => {
-  await User.findByIdAndUpdate(req.params.id, {
-    status: "rejected"
-  });
-
-  res.json({ ok: true });
+  res.json({ total, approved, pending, rejected });
 });
 
 /* =======================
-   AUTO VERIFICATION ENGINE
+   WINNER SYSTEM
 ======================= */
-async function autoVerifyEngine() {
+let numbers = [];
+let interval;
 
-  const pending = await User.find({ status: "pending_auto" });
-
-  for (let user of pending) {
-
-    // SIMPLE AUTO RULES (you can improve later)
-    const looksReal =
-      user.transactionId.length >= 8 &&
-      /[a-zA-Z0-9]/.test(user.transactionId);
-
-    if (looksReal) {
-      user.status = "approved";
-      user.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      await user.save();
-    }
-  }
+function checkWinner() {
+  // simple demo winner logic
+  const users = User.find({ status: "approved" });
+  return users;
 }
 
-// run every 15 seconds
-setInterval(autoVerifyEngine, 15000);
+app.post("/winner", async (req, res) => {
+  const { userId } = req.body;
 
-/* =======================
-   CHECK ACCESS
-======================= */
-app.post("/check", async (req, res) => {
-  const user = await User.findOne({ phone: req.body.phone });
+  const user = await User.findById(userId);
 
   if (!user) return res.json({ ok: false });
-  if (user.status !== "approved") return res.json({ ok: false });
-  if (!user.expiresAt) return res.json({ ok: false });
-  if (new Date() > user.expiresAt) return res.json({ ok: false });
+
+  user.status = "winner";
+  await user.save();
+
+  io.emit("winner", userId);
 
   res.json({ ok: true });
 });
 
 /* =======================
-   BINGO GAME
+   SOCKET BINGO GAME
 ======================= */
-let interval;
-let numbers = [];
-
 io.on("connection", (socket) => {
 
   socket.on("start", () => {
@@ -171,8 +182,8 @@ io.on("connection", (socket) => {
     interval = setInterval(() => {
 
       const num = Math.floor(Math.random() * 75) + 1;
-
       numbers.push(num);
+
       io.emit("number", num);
 
       if (numbers.length >= 75) {
@@ -183,18 +194,11 @@ io.on("connection", (socket) => {
 
   });
 
-  socket.on("winner", (id) => {
-    io.emit("winner", id);
-    clearInterval(interval);
-  });
-
 });
 
 /* =======================
-   SERVER START
+   SERVER
 ======================= */
-const PORT = process.env.PORT || 10000;
-
-server.listen(PORT, () => {
-  console.log("🚀 Bingo Server Running on port", PORT);
+server.listen(process.env.PORT || 10000, () => {
+  console.log("🚀 Bingo PRO V5 Running");
 });
