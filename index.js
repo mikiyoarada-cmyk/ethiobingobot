@@ -21,32 +21,22 @@ mongoose.connect(process.env.MONGODB_URI)
   .catch(err => console.log(err));
 
 /* =======================
-   USER MODEL (WALLET SYSTEM)
+   USER MODEL (BALANCE SYSTEM)
 ======================= */
 const userSchema = new mongoose.Schema({
   phone: String,
   balance: { type: Number, default: 0 },
   cartela: Array,
-  room: { type: String, default: "global" },
   createdAt: { type: Date, default: Date.now }
 });
 
 const User = mongoose.model("User", userSchema);
 
 /* =======================
-   ADMIN ADD BALANCE (MANUAL TOPUP)
+   FIX ADMIN PAGE (IMPORTANT)
 ======================= */
-app.post("/admin/add-balance", async (req, res) => {
-  const { phone, amount } = req.body;
-
-  const user = await User.findOne({ phone });
-
-  if (!user) return res.json({ ok: false, msg: "User not found" });
-
-  user.balance += amount;
-  await user.save();
-
-  res.json({ ok: true, balance: user.balance });
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/admin.html"));
 });
 
 /* =======================
@@ -65,7 +55,23 @@ app.post("/register", async (req, res) => {
 });
 
 /* =======================
-   BUY CARTELA (BALANCE CHECK)
+   ADD BALANCE (ADMIN SIMULATION)
+======================= */
+app.post("/add-balance", async (req, res) => {
+  const { phone, amount } = req.body;
+
+  const user = await User.findOne({ phone });
+
+  if (!user) return res.json({ ok: false });
+
+  user.balance += amount;
+  await user.save();
+
+  res.json({ ok: true, balance: user.balance });
+});
+
+/* =======================
+   BUY CARTELA (BET SYSTEM)
 ======================= */
 app.post("/buy-cartela", async (req, res) => {
   const { phone } = req.body;
@@ -85,7 +91,11 @@ app.post("/buy-cartela", async (req, res) => {
 
   await user.save();
 
-  res.json({ ok: true, cartela: user.cartela, balance: user.balance });
+  res.json({
+    ok: true,
+    cartela: user.cartela,
+    balance: user.balance
+  });
 });
 
 /* =======================
@@ -118,6 +128,7 @@ io.on("connection", (socket) => {
     let t = 40;
 
     countdown = setInterval(() => {
+
       t--;
       io.emit("countdown", t);
 
@@ -144,31 +155,14 @@ io.on("connection", (socket) => {
 
   }
 
+  socket.on("winner", (phone) => {
+    io.emit("winner", phone);
+  });
+
 });
 
 /* =======================
-   WINNER SYSTEM
-======================= */
-app.post("/winner", async (req, res) => {
-  const { phone } = req.body;
-
-  const user = await User.findOne({ phone });
-
-  if (!user) return res.json({ ok: false });
-
-  const prize = 100;
-
-  user.balance += prize;
-
-  await user.save();
-
-  io.emit("winner", phone);
-
-  res.json({ ok: true, prize });
-});
-
-/* =======================
-   ADMIN DASHBOARD API
+   ADMIN USERS LIST
 ======================= */
 app.get("/admin/users", async (req, res) => {
   const users = await User.find();
@@ -178,6 +172,8 @@ app.get("/admin/users", async (req, res) => {
 /* =======================
    SERVER
 ======================= */
-server.listen(process.env.PORT || 10000, () => {
-  console.log("🚀 Safe Bingo System Running");
+const PORT = process.env.PORT || 10000;
+
+server.listen(PORT, () => {
+  console.log("🚀 Bingo System Running on", PORT);
 });

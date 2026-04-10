@@ -9,8 +9,9 @@
 
 <button onclick="startGame()">▶ Start Game (40s)</button>
 
-<h3 id="countdown">40</h3>
+<h3 id="count">40</h3>
 
+<h3>Users</h3>
 <div id="users"></div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -18,29 +19,43 @@
 const socket = io();
 
 /* LOAD USERS */
-async function load() {
-  const res = await fetch("/admin/list");
+async function loadUsers() {
+  const res = await fetch("/admin/users");
   const users = await res.json();
 
   document.getElementById("users").innerHTML =
     users.map(u => `
       <div style="border:1px solid #000;padding:5px;margin:5px">
-        📞 ${u.phone}
-        <br>
-        <b>Cartela:</b> ${JSON.stringify(u.cartela)}
+        📞 ${u.phone} <br>
+        💰 Balance: ${u.balance} <br>
+        🎫 Cartela: ${JSON.stringify(u.cartela || [])}
+        <br><br>
+        <button onclick="addBalance('${u.phone}', 50)">+50</button>
+        <button onclick="addBalance('${u.phone}', 100)">+100</button>
       </div>
     `).join("");
 }
 
+async function addBalance(phone, amount) {
+  await fetch("/add-balance", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone, amount })
+  });
+
+  loadUsers();
+}
+
+/* START GAME */
 function startGame() {
   socket.emit("startGame");
 }
 
 socket.on("countdown", (t) => {
-  document.getElementById("countdown").innerText = t;
+  document.getElementById("count").innerText = t;
 });
 
-load();
+loadUsers();
 </script>
 
 </body>
