@@ -1,5 +1,36 @@
 <!DOCTYPE html>
 <html>
+<head>
+  <style>
+    .card {
+      border: 2px solid black;
+      margin: 6px;
+      padding: 6px;
+      display: inline-block;
+      width: 160px;
+      font-size: 12px;
+    }
+
+    .cell {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      text-align: center;
+      margin: 1px;
+    }
+
+    .hit {
+      background: green;
+      color: white;
+    }
+
+    #cards {
+      display: flex;
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+
 <body>
 
 <h1>Bingo Live</h1>
@@ -10,6 +41,9 @@
 
 <h3>Called Numbers:</h3>
 <div id="history"></div>
+
+<h3>🏆 Winner:</h3>
+<div id="winner"></div>
 
 <h3>Cartelas (600)</h3>
 <div id="cards"></div>
@@ -23,7 +57,7 @@ let queue = [];
 let playing = false;
 let cards = [];
 
-// 🎯 PREFIX
+// PREFIX
 function getPrefix(num) {
   if (num <= 15) return "B";
   if (num <= 30) return "I";
@@ -32,7 +66,22 @@ function getPrefix(num) {
   return "O";
 }
 
-// 🔊 PLAY QUEUE (FASTER)
+// CHECK WINNER
+function checkCardWin(card) {
+  for (let r = 0; r < 5; r++) {
+    let win = true;
+    for (let c = 0; c < 5; c++) {
+      if (!called.includes(card.data[r][c])) {
+        win = false;
+        break;
+      }
+    }
+    if (win) return true;
+  }
+  return false;
+}
+
+// PLAY QUEUE
 async function playQueue() {
   if (playing || queue.length === 0) return;
 
@@ -44,26 +93,54 @@ async function playQueue() {
   document.getElementById('num').innerText = prefix + "-" + num;
 
   called.push(num);
+
   document.getElementById('history').innerText =
     called.map(n => getPrefix(n) + "-" + n).join(', ');
 
+  // highlight cards
+  highlightCards();
+
+  // winner check
+  checkWinner();
+
   let audio = new Audio(`voices/${prefix}${num}.mp3`);
 
-  try {
-    await audio.play();
-  } catch (e) {}
+  try { await audio.play(); } catch(e) {}
 
-  // wait audio finish
-  await new Promise(resolve => audio.onended = resolve);
+  await new Promise(r => audio.onended = r);
 
-  // 🔥 ONLY 3 SECONDS NOW
   await new Promise(r => setTimeout(r, 3000));
 
   playing = false;
   playQueue();
 }
 
-// ===== CARDS GENERATOR =====
+// HIGHLIGHT NUMBERS
+function highlightCards() {
+  cards.forEach(card => {
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        const val = card.data[r][c];
+        const el = document.getElementById(`c-${card.id}-${r}-${c}`);
+        if (called.includes(val)) {
+          el.classList.add("hit");
+        }
+      }
+    }
+  });
+}
+
+// WINNER CHECK
+function checkWinner() {
+  cards.forEach(card => {
+    if (!card.won && checkCardWin(card)) {
+      card.won = true;
+      socket.emit("winner", card.id);
+    }
+  });
+}
+
+// GENERATE CARDS
 function generateCards() {
   for (let i = 1; i <= 600; i++) {
     let card = [];
@@ -76,49 +153,64 @@ function generateCards() {
       card.push(row);
     }
 
-    cards.push({ id: i, data: card });
+    cards.push({ id: i, data: card, won: false });
   }
 
   renderCards();
 }
 
-// ===== SHOW CARDS =====
+// RENDER
 function renderCards() {
   let html = "";
 
   cards.forEach(c => {
-    html += `<div style="border:1px solid black;margin:5px;padding:5px">
-      <b>Card ${c.id}</b><br>
-      ${c.data.map(r => r.join(" ")).join("<br>")}
-    </div>`;
+    html += `<div class="card">
+      <b>Card ${c.id}</b><br>`;
+
+    for (let r = 0; r < 5; r++) {
+      for (let c2 = 0; c2 < 5; c2++) {
+        html += `<span class="cell" id="c-${c.id}-${r}-${c2}">
+          ${c.data[r][c2]}
+        </span>`;
+      }
+      html += "<br>";
+    }
+
+    html += `</div>`;
   });
 
   document.getElementById('cards').innerHTML = html;
 }
 
-// START
+// START GAME
 socket.on('start', async () => {
   called = [];
   queue = [];
   document.getElementById('history').innerText = "";
+  document.getElementById('winner').innerText = "";
 
   if (cards.length === 0) generateCards();
 
   let startAudio = new Audio("voices/start.mp3");
   await startAudio.play();
-
   await new Promise(r => startAudio.onended = r);
 
   playQueue();
 });
 
-// RECEIVE
+// RECEIVE NUMBERS
 socket.on('number', (num) => {
   queue.push(num);
   playQueue();
 });
 
-// BUTTON
+// WINNER EVENT
+socket.on("winner", (id) => {
+  document.getElementById("winner").innerText =
+    "🏆 Card " + id + " WINS!";
+});
+
+// START BUTTON
 function start() {
   socket.emit('start');
 }
