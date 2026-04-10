@@ -1,4 +1,4 @@
-require("dotenv").config(); // MUST be first
+require("dotenv").config();
 
 const express = require("express");
 const http = require("http");
@@ -18,24 +18,24 @@ app.use(express.static("public"));
 console.log("MONGODB_URI =", process.env.MONGODB_URI);
 
 if (!process.env.MONGODB_URI) {
-  console.log("❌ ERROR: MONGODB_URI not found in .env");
+  console.log("❌ Missing MONGODB_URI in .env");
   process.exit(1);
 }
 
 /* =========================
-   MONGODB CONNECT
+   MONGO CONNECT
 ========================= */
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
   .catch(err => console.log("Mongo error:", err));
 
 /* =========================
-   USER SCHEMA
+   USER MODEL
 ========================= */
 const userSchema = new mongoose.Schema({
   phone: String,
   transactionId: String,
-  status: { type: String, default: "pending" }, // pending / approved / rejected
+  status: { type: String, default: "pending" },
   expiresAt: Date,
   createdAt: { type: Date, default: Date.now }
 });
@@ -43,7 +43,7 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.model("User", userSchema);
 
 /* =========================
-   PAYMENT SUBMIT (TELEBIRR)
+   PAY REQUEST (TELEBIRR)
 ========================= */
 app.post("/pay", async (req, res) => {
   try {
@@ -60,15 +60,15 @@ app.post("/pay", async (req, res) => {
       status: "pending"
     });
 
-    res.json({ ok: true, msg: "Payment submitted successfully" });
+    res.json({ ok: true, msg: "Payment submitted" });
 
   } catch (err) {
-    res.json({ ok: false, msg: "Server error" });
+    res.json({ ok: false, msg: "Error" });
   }
 });
 
 /* =========================
-   ADMIN - LIST USERS
+   ADMIN LIST USERS
 ========================= */
 app.get("/admin/list", async (req, res) => {
   const users = await User.find().sort({ createdAt: -1 });
@@ -76,34 +76,34 @@ app.get("/admin/list", async (req, res) => {
 });
 
 /* =========================
-   ADMIN - APPROVE USER
+   APPROVE USER
 ========================= */
 app.post("/admin/approve/:id", async (req, res) => {
   const user = await User.findById(req.params.id);
 
-  if (!user) return res.json({ ok: false, msg: "User not found" });
+  if (!user) return res.json({ ok: false });
 
   user.status = "approved";
-  user.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+  user.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
   await user.save();
 
-  res.json({ ok: true, msg: "User approved" });
+  res.json({ ok: true });
 });
 
 /* =========================
-   ADMIN - REJECT USER
+   REJECT USER
 ========================= */
 app.post("/admin/reject/:id", async (req, res) => {
   await User.findByIdAndUpdate(req.params.id, {
     status: "rejected"
   });
 
-  res.json({ ok: true, msg: "User rejected" });
+  res.json({ ok: true });
 });
 
 /* =========================
-   CHECK ACCESS BEFORE GAME
+   CHECK ACCESS
 ========================= */
 app.post("/check", async (req, res) => {
   const { phone } = req.body;
@@ -119,7 +119,7 @@ app.post("/check", async (req, res) => {
 });
 
 /* =========================
-   BINGO GAME (SOCKET.IO)
+   SOCKET BINGO GAME
 ========================= */
 let interval;
 let numbers = [];
@@ -144,7 +144,7 @@ io.on("connection", (socket) => {
         clearInterval(interval);
       }
 
-    }, 4000); // safe + stable (audio friendly)
+    }, 4000);
 
   });
 

@@ -1,30 +1,79 @@
-<h2>Admin Panel</h2>
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Bingo Admin Dashboard</title>
+
+  <style>
+    body {
+      font-family: Arial;
+      background: #111;
+      color: white;
+      padding: 20px;
+    }
+
+    .user {
+      background: #222;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 8px;
+    }
+
+    button {
+      margin: 5px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    .approve { background: green; color: white; }
+    .reject { background: red; color: white; }
+    .pending { color: orange; }
+    .approved { color: lime; }
+  </style>
+</head>
+
+<body>
+
+<h1>🎯 Bingo Admin Dashboard</h1>
+
+<button onclick="loadUsers()">🔄 Refresh</button>
+
 <div id="users"></div>
 
 <script>
-async function load(){
+async function loadUsers() {
   const res = await fetch("/admin/list");
   const data = await res.json();
 
-  document.getElementById("users").innerHTML =
-    data.map(u=>`
-      <div>
-        ${u.phone} - ${u.status}
-        <button onclick="approve('${u._id}')">Approve</button>
-        <button onclick="reject('${u._id}')">Reject</button>
+  let html = "";
+
+  data.forEach(u => {
+    html += `
+      <div class="user">
+        <b>Phone:</b> ${u.phone} <br>
+        <b>Transaction:</b> ${u.transactionId} <br>
+        <b>Status:</b> <span class="${u.status}">${u.status}</span> <br>
+
+        <button class="approve" onclick="approve('${u._id}')">Approve</button>
+        <button class="reject" onclick="reject('${u._id}')">Reject</button>
       </div>
-    `).join("");
+    `;
+  });
+
+  document.getElementById("users").innerHTML = html;
 }
 
-async function approve(id){
-  await fetch("/admin/approve/"+id,{method:"POST"});
-  load();
+async function approve(id) {
+  await fetch("/admin/approve/" + id, { method: "POST" });
+  loadUsers();
 }
 
-async function reject(id){
-  await fetch("/admin/reject/"+id,{method:"POST"});
-  load();
+async function reject(id) {
+  await fetch("/admin/reject/" + id, { method: "POST" });
+  loadUsers();
 }
 
-load();
+loadUsers();
 </script>
+
+</body>
+</html>
