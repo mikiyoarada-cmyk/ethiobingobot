@@ -14,11 +14,16 @@ app.use(express.json());
 app.use(express.static("public"));
 
 /* =======================
-   MONGO CONNECT
+   ENV CHECK
+======================= */
+console.log("BOT_TOKEN =", process.env.BOT_TOKEN);
+
+/* =======================
+   MONGO
 ======================= */
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
-  .catch(err => console.log(err));
+  .catch(err => console.log("Mongo error:", err));
 
 /* =======================
    USER MODEL
@@ -32,26 +37,18 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.model("User", userSchema);
 
 /* =======================
-   TELEGRAM WEBHOOK (FIX 404)
+   TELEGRAM WEBHOOK FIX
 ======================= */
-app.post(`/bot${process.env.BOT_TOKEN}`, async (req, res) => {
+app.post(`/bot${process.env.BOT_TOKEN}`, (req, res) => {
   try {
     const update = req.body;
 
     if (update.message) {
-      const chatId = update.message.chat.id;
       const text = update.message.text;
-
-      console.log("Telegram message:", text);
-
-      // simple bot response system
-      if (text === "/start") {
-        console.log("User started bot");
-      }
+      console.log("📩 Telegram:", text);
     }
 
     res.json({ ok: true });
-
   } catch (err) {
     console.log(err);
     res.status(200).end();
@@ -74,7 +71,7 @@ app.post("/register", async (req, res) => {
 });
 
 /* =======================
-   GET BALANCE
+   BALANCE
 ======================= */
 app.get("/balance/:phone", async (req, res) => {
   const user = await User.findOne({ phone: req.params.phone });
@@ -97,7 +94,7 @@ app.post("/deposit", async (req, res) => {
 });
 
 /* =======================
-   CARTELA
+   CARTELA GENERATOR
 ======================= */
 function generateCartela() {
   return Array.from({ length: 5 }, () =>
@@ -127,14 +124,14 @@ app.post("/join", async (req, res) => {
 });
 
 /* =======================
-   ADMIN PAGE FIX
+   ADMIN PAGE
 ======================= */
 app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "public/admin.html"));
 });
 
 /* =======================
-   SOCKET GAME
+   SOCKET GAME ENGINE
 ======================= */
 let interval;
 let countdown;
@@ -147,6 +144,7 @@ io.on("connection", (socket) => {
     io.emit("countdown", t);
 
     countdown = setInterval(() => {
+
       t--;
       io.emit("countdown", t);
 
@@ -154,6 +152,7 @@ io.on("connection", (socket) => {
         clearInterval(countdown);
         startGame();
       }
+
     }, 1000);
 
   });
@@ -169,6 +168,7 @@ io.on("connection", (socket) => {
       const num = Math.floor(Math.random() * 75) + 1;
 
       numbers.push(num);
+
       io.emit("number", num);
 
       if (numbers.length >= 75) {
@@ -184,6 +184,8 @@ io.on("connection", (socket) => {
 /* =======================
    SERVER START
 ======================= */
-server.listen(process.env.PORT || 10000, () => {
-  console.log("🚀 Bingo system running");
+const PORT = process.env.PORT || 10000;
+
+server.listen(PORT, () => {
+  console.log("🚀 Bingo system running on port", PORT);
 });
