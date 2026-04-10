@@ -16,39 +16,67 @@
 const socket = io();
 
 let called = [];
-let currentAudio = null;
+let queue = [];
+let playing = false;
 
-// 🔊 PLAY AUDIO (FIXED)
-function playSound(file) {
-  if (currentAudio) {
-    currentAudio.pause();
-    currentAudio.currentTime = 0;
-  }
-  currentAudio = new Audio(file);
-  currentAudio.play();
-}
+// 🔊 PLAY NEXT SOUND (SEQUENTIAL)
+async function playQueue() {
+  if (playing || queue.length === 0) return;
 
-// GAME START
-socket.on('start', () => {
-  called = [];
-  document.getElementById('history').innerText = "";
-  playSound("voices/start.mp3");
-});
+  playing = true;
 
-// NUMBER RECEIVED
-socket.on('number', (num) => {
+  const num = queue.shift();
 
-  // update main number
+  // show number
   document.getElementById('num').innerText = num;
 
   // save history
   called.push(num);
-
-  // show all numbers
   document.getElementById('history').innerText = called.join(', ');
 
-  // 🔊 MATCHED VOICE
-  playSound("voices/B" + num + ".mp3");
+  // play audio
+  let audio = new Audio("voices/B" + num + ".mp3");
+
+  audio.play();
+
+  // WAIT until audio finishes
+  await new Promise(resolve => {
+    audio.onended = resolve;
+  });
+
+  // WAIT 5 seconds AFTER sound
+  await new Promise(r => setTimeout(r, 5000));
+
+  playing = false;
+
+  // play next in queue
+  playQueue();
+}
+
+// GAME START
+socket.on('start', async () => {
+  called = [];
+  queue = [];
+  document.getElementById('history').innerText = "";
+
+  // play start voice
+  let startAudio = new Audio("voices/start.mp3");
+  startAudio.play();
+
+  await new Promise(resolve => {
+    startAudio.onended = resolve;
+  });
+
+  // small delay
+  setTimeout(() => {
+    playQueue();
+  }, 1000);
+});
+
+// RECEIVE NUMBER
+socket.on('number', (num) => {
+  queue.push(num);
+  playQueue();
 });
 
 // START BUTTON
