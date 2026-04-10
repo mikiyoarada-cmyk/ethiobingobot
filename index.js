@@ -14,16 +14,11 @@ app.use(express.json());
 app.use(express.static("public"));
 
 /* =======================
-   ENV CHECK
-======================= */
-console.log("Server starting...");
-
-/* =======================
    MONGO
 ======================= */
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
-  .catch(err => console.log(err));
+  .catch(err => console.log("Mongo error:", err));
 
 /* =======================
    USER MODEL
@@ -39,38 +34,24 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.model("User", userSchema);
 
 /* =======================
-   SIMPLE ADMIN LOGIN
+   ADMIN PAGE (FIX CAN GET ERROR)
 ======================= */
-app.post("/admin/login", (req, res) => {
-  const { password } = req.body;
-
-  if (password === process.env.ADMIN_PASSWORD) {
-    return res.json({ ok: true });
-  }
-
-  res.json({ ok: false });
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/admin.html"));
 });
 
 /* =======================
-   PAYMENT REQUEST (TELEBIRR)
+   PAY
 ======================= */
 app.post("/pay", async (req, res) => {
   const { phone, transactionId } = req.body;
 
   const exists = await User.findOne({ transactionId });
-  if (exists) return res.json({ ok: false, msg: "Already used" });
+  if (exists) return res.json({ ok: false });
 
-  await User.create({
-    phone,
-    transactionId,
-    status: "pending"
-  });
+  await User.create({ phone, transactionId, status: "pending" });
 
-  res.json({
-    ok: true,
-    telebirr: process.env.TELEBIRR_NUMBER,
-    msg: "Send payment to this number and wait approval"
-  });
+  res.json({ ok: true });
 });
 
 /* =======================
@@ -102,7 +83,7 @@ app.post("/admin/reject/:id", async (req, res) => {
 });
 
 /* =======================
-   CHECK ACCESS
+   ACCESS CHECK
 ======================= */
 app.post("/check", async (req, res) => {
   const user = await User.findOne({ phone: req.body.phone });
@@ -115,48 +96,68 @@ app.post("/check", async (req, res) => {
 });
 
 /* =======================
-   TELEGRAM BOT (ADMIN CONTROL)
-======================= */
-const TelegramBot = require("node-telegram-bot-api");
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
-
-bot.onText(/\/users/, async (msg) => {
-  const users = await User.find().limit(10);
-
-  let text = "🎯 Pending Users:\n\n";
-  users.forEach(u => {
-    text += `${u.phone} | ${u.status}\n`;
-  });
-
-  bot.sendMessage(msg.chat.id, text);
-});
-
-/* =======================
-   BINGO GAME
+   GAME CONTROL STATE
 ======================= */
 let interval;
+let countdownTimer;
 let numbers = [];
+let gameStarted = false;
 
+/* =======================
+   SOCKET GAME
+======================= */
 io.on("connection", (socket) => {
 
-  socket.on("start", () => {
+  console.log("User connected");
 
+  /* ADMIN START GAME */
+  socket.on("startGame", () => {
+
+    if (gameStarted) return;
+
+    gameStarted = true;
     numbers = [];
-    io.emit("start");
 
-    if (interval) clearInterval(interval);
+    io.emit("countdown", 40);
+
+    let time = 40;
+
+    countdownTimer = setInterval(() => {
+      time--;
+
+      io.emit("countdown", time);
+
+      if (time <= 0) {
+        clearInterval(countdownTimer);
+        startBingo();
+      }
+
+    }, 1000);
+  });
+
+  function startBingo() {
+
+    io.emit("start");
 
     interval = setInterval(() => {
 
       const num = Math.floor(Math.random() * 75) + 1;
 
       numbers.push(num);
+
       io.emit("number", num);
 
-      if (numbers.length >= 75) clearInterval(interval);
+      if (numbers.length >= 75) {
+        clearInterval(interval);
+        gameStarted = false;
+      }
 
     }, 4000);
+  }
 
+  socket.on("winner", (id) => {
+    io.emit("winner", id);
+    clearInterval(interval);
   });
 
 });

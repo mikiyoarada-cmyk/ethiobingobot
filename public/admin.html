@@ -1,85 +1,51 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Ethio Bingo Admin</title>
-
-  <style>
-    body {
-      font-family: Arial;
-      background: #111;
-      color: white;
-      padding: 20px;
-    }
-
-    h1 { color: #00ffcc; }
-
-    .card {
-      background: #222;
-      padding: 10px;
-      margin: 10px 0;
-      border-radius: 10px;
-    }
-
-    button {
-      padding: 6px 12px;
-      margin: 5px;
-      cursor: pointer;
-      border: none;
-      border-radius: 5px;
-    }
-
-    .approve { background: green; color: white; }
-    .reject { background: red; color: white; }
-
-    .status {
-      font-weight: bold;
-    }
-
-    .pending { color: orange; }
-    .approved { color: lime; }
-    .rejected { color: red; }
-  </style>
+  <title>Admin Bingo</title>
 </head>
-
 <body>
 
-<h1>🎯 Ethio Bingo Admin Panel</h1>
+<h2>Admin Panel</h2>
 
-<button onclick="loadUsers()">🔄 Refresh</button>
+<button onclick="startGame()">▶ Start Game (40s)</button>
 
 <div id="users"></div>
 
+<script src="/socket.io/socket.io.js"></script>
 <script>
-const API = "";
+const socket = io();
 
-async function loadUsers() {
-  const res = await fetch(API + "/admin/list");
-  const users = await res.json();
+/* LOAD USERS */
+async function load() {
+  const res = await fetch("/admin/list");
+  const data = await res.json();
 
   document.getElementById("users").innerHTML =
-    users.map(u => `
-      <div class="card">
-        <div><b>📞 Phone:</b> ${u.phone}</div>
-        <div><b>💳 TX ID:</b> ${u.transactionId}</div>
-        <div><b>Status:</b> <span class="status ${u.status}">${u.status}</span></div>
-
-        <button class="approve" onclick="approve('${u._id}')">Approve</button>
-        <button class="reject" onclick="reject('${u._id}')">Reject</button>
+    data.map(u => `
+      <div>
+        ${u.phone} - ${u.status}
+        <button onclick="approve('${u._id}')">Approve</button>
+        <button onclick="reject('${u._id}')">Reject</button>
       </div>
     `).join("");
 }
 
 async function approve(id) {
   await fetch("/admin/approve/" + id, { method: "POST" });
-  loadUsers();
+  load();
 }
 
 async function reject(id) {
   await fetch("/admin/reject/" + id, { method: "POST" });
-  loadUsers();
+  load();
 }
 
-loadUsers();
+/* START GAME */
+function startGame() {
+  socket.emit("startGame");
+}
+
+load();
 </script>
 
 </body>
