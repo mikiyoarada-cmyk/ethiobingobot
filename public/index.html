@@ -1,67 +1,90 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Bingo Game</title>
-  <script src="/socket.io/socket.io.js"></script>
-  <style>
-    body { font-family: Arial; text-align:center; background:#111; color:#fff; }
-    .grid { display:grid; grid-template-columns:repeat(5,60px); gap:5px; justify-content:center; margin-top:20px; }
-    .cell {
-      width:60px;height:60px;
-      display:flex;align-items:center;justify-content:center;
-      background:#333;border-radius:8px;
-    }
-    .active { background:green; }
-    .calledBox { font-size:30px; margin-top:20px; }
-  </style>
+  <title>Bingo</title>
 </head>
 <body>
 
-<h1>🎱 Bingo Game</h1>
-<div class="calledBox" id="last">Waiting...</div>
+<h2>Bingo Game</h2>
 
-<div class="grid" id="grid"></div>
+<input id="phone" placeholder="Enter phone" />
+<button onclick="register()">Start</button>
 
+<h3>Balance: <span id="bal">0</span></h3>
+
+<button onclick="deposit()">💸 Deposit</button>
+<button onclick="joinGame()">🎮 Join Game</button>
+<button onclick="startGame()">🚀 Start</button>
+
+<h3>Countdown: <span id="count">0</span></h3>
+<h3>Numbers:</h3>
+<div id="nums"></div>
+
+<h3>Your Cartela:</h3>
+<div id="cartela"></div>
+
+<script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
-let card = [];
-let called = [];
+let phone = "";
 
-const telegramId = prompt("Enter your Telegram ID");
+async function register() {
+  phone = document.getElementById("phone").value;
 
-socket.emit("register", { telegramId });
-
-socket.on("card", (data) => {
-  card = data;
-  renderCard();
-});
-
-socket.on("numberCalled", (data) => {
-  called = data.calledNumbers;
-  document.getElementById("last").innerText = "Called: " + data.number;
-  renderCard();
-});
-
-socket.on("winner", (data) => {
-  alert("🏆 WINNER DETECTED!");
-});
-
-function renderCard() {
-  const grid = document.getElementById("grid");
-  grid.innerHTML = "";
-
-  card.forEach(num => {
-    const div = document.createElement("div");
-    div.className = "cell";
-
-    if (called.includes(num)) {
-      div.classList.add("active");
-    }
-
-    div.innerText = num;
-    grid.appendChild(div);
+  await fetch("/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone })
   });
+
+  loadBalance();
 }
+
+async function loadBalance() {
+  const res = await fetch("/balance/" + phone);
+  const data = await res.json();
+  document.getElementById("bal").innerText = data.balance;
+}
+
+async function deposit() {
+  await fetch("/deposit", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone, amount: 50 })
+  });
+
+  loadBalance();
+}
+
+async function joinGame() {
+  const res = await fetch("/join", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone })
+  });
+
+  const data = await res.json();
+
+  if (data.ok) {
+    document.getElementById("cartela").innerText =
+      JSON.stringify(data.cartela);
+    loadBalance();
+  } else {
+    alert(data.msg);
+  }
+}
+
+function startGame() {
+  socket.emit("start");
+}
+
+socket.on("countdown", (t) => {
+  document.getElementById("count").innerText = t;
+});
+
+socket.on("number", (n) => {
+  document.getElementById("nums").innerHTML += n + " ";
+});
 </script>
 
 </body>

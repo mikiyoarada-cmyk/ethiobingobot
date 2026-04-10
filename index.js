@@ -14,58 +14,49 @@ app.use(express.json());
 app.use(express.static("public"));
 
 /* =======================
-   DATABASE
+   DB
 ======================= */
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
   .catch(err => console.log(err));
 
 /* =======================
-   USER MODEL (VIRTUAL ECONOMY)
+   USER MODEL
 ======================= */
 const userSchema = new mongoose.Schema({
   phone: String,
   balance: { type: Number, default: 0 },
-  inviteCode: String,
-  invitedBy: String,
-  cartela: Array,
-  createdAt: { type: Date, default: Date.now }
+  cartela: Array
 });
 
 const User = mongoose.model("User", userSchema);
 
 /* =======================
-   REGISTER + INVITE REWARD (POINTS ONLY)
+   REGISTER
 ======================= */
 app.post("/register", async (req, res) => {
-  const { phone, inviteCode } = req.body;
+  const { phone } = req.body;
 
   let user = await User.findOne({ phone });
 
   if (!user) {
-    const myCode = "INV" + Math.floor(Math.random() * 99999);
-
-    user = await User.create({
-      phone,
-      inviteCode: myCode,
-      balance: 0,
-      invitedBy: inviteCode || null
-    });
-
-    // VIRTUAL reward (NOT CASH)
-    if (inviteCode) {
-      await User.updateOne(
-        { inviteCode },
-        { $inc: { balance: 5 } } // points only
-      );
-    }
+    user = await User.create({ phone, balance: 0 });
   }
 
   res.json({ ok: true, user });
 });
 
 /* =======================
-   DEPOSIT / WITHDRAW (SIMULATION ONLY)
+   BALANCE
+======================= */
+app.get("/balance/:phone", async (req, res) => {
+  const user = await User.findOne({ phone: req.params.phone });
+
+  res.json({ balance: user ? user.balance : 0 });
+});
+
+/* =======================
+   DEPOSIT (SIMULATION)
 ======================= */
 app.post("/deposit", async (req, res) => {
   const { phone, amount } = req.body;
@@ -73,94 +64,52 @@ app.post("/deposit", async (req, res) => {
   const user = await User.findOne({ phone });
   if (!user) return res.json({ ok: false });
 
-  user.balance += amount;
-  await user.save();
-
-  res.json({ ok: true, balance: user.balance });
-});
-
-app.post("/withdraw", async (req, res) => {
-  const { phone, amount } = req.body;
-
-  const user = await User.findOne({ phone });
-
-  if (!user || user.balance < amount) {
-    return res.json({ ok: false, msg: "Insufficient balance" });
-  }
-
-  user.balance -= amount;
+  user.balance += Number(amount);
   await user.save();
 
   res.json({ ok: true, balance: user.balance });
 });
 
 /* =======================
-   CARTELA
+   BUY / JOIN GAME
 ======================= */
 function generateCartela() {
-  let card = [];
-
-  for (let i = 0; i < 5; i++) {
-    let row = [];
-
-    for (let j = 0; j < 5; j++) {
-      row.push(Math.floor(Math.random() * 75) + 1);
-    }
-
-    card.push(row);
-  }
-
-  return card;
+  return Array.from({ length: 5 }, () =>
+    Array.from({ length: 5 }, () => Math.floor(Math.random() * 75) + 1)
+  );
 }
 
-/* =======================
-   JOIN GAME / BUY CARTELA
-======================= */
-app.post("/buy", async (req, res) => {
+app.post("/join", async (req, res) => {
   const { phone } = req.body;
 
   const user = await User.findOne({ phone });
-
   if (!user) return res.json({ ok: false });
 
-  const price = 10;
-
-  if (user.balance < price) {
+  if (user.balance < 10) {
     return res.json({ ok: false, msg: "Insufficient balance" });
   }
 
-  user.balance -= price;
+  user.balance -= 10;
   user.cartela = generateCartela();
-
   await user.save();
 
   res.json({ ok: true, cartela: user.cartela, balance: user.balance });
 });
 
 /* =======================
-   USERS
-======================= */
-app.get("/users", async (req, res) => {
-  const users = await User.find();
-  res.json(users);
-});
-
-/* =======================
-   GAME ENGINE
+   SOCKET GAME
 ======================= */
 let interval;
 let countdown;
 
 io.on("connection", (socket) => {
 
-  socket.on("startGame", () => {
-
-    io.emit("countdown", 40);
+  socket.on("start", () => {
 
     let t = 40;
+    io.emit("countdown", t);
 
     countdown = setInterval(() => {
-
       t--;
       io.emit("countdown", t);
 
@@ -168,23 +117,20 @@ io.on("connection", (socket) => {
         clearInterval(countdown);
         startGame();
       }
-
     }, 1000);
 
   });
 
   function startGame() {
 
-    io.emit("start");
+    io.emit("gameStart");
 
     let numbers = [];
 
     interval = setInterval(() => {
-
       const num = Math.floor(Math.random() * 75) + 1;
 
       numbers.push(num);
-
       io.emit("number", num);
 
       if (numbers.length >= 75) {
@@ -192,31 +138,13 @@ io.on("connection", (socket) => {
       }
 
     }, 4000);
-
   }
 
   socket.on("winner", (phone) => {
-
-    io.emit("gameEnd", {
-      msg: "🎉 GOOD BINGO",
-      winner: phone
-    });
-
+    io.emit("winner", phone);
     clearInterval(interval);
   });
 
 });
 
-/* =======================
-   ADMIN PAGE
-======================= */
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/admin.html"));
-});
-
-/* =======================
-   SERVER
-======================= */
-server.listen(process.env.PORT || 10000, () => {
-  console.log("🚀 Bingo Safe System Running");
-});
+server.listen(10000, () => console.log("Server running"));
