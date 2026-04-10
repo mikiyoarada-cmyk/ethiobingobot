@@ -14,18 +14,20 @@ app.use(express.json());
 app.use(express.static("public"));
 
 /* =======================
-   MONGO
+   DATABASE
 ======================= */
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
   .catch(err => console.log(err));
 
 /* =======================
-   USER MODEL (BALANCE SYSTEM)
+   USER MODEL (VIRTUAL ECONOMY)
 ======================= */
 const userSchema = new mongoose.Schema({
   phone: String,
   balance: { type: Number, default: 0 },
+  inviteCode: String,
+  invitedBy: String,
   cartela: Array,
   createdAt: { type: Date, default: Date.now }
 });
@@ -33,35 +35,42 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.model("User", userSchema);
 
 /* =======================
-   FIX ADMIN PAGE (IMPORTANT)
-======================= */
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/admin.html"));
-});
-
-/* =======================
-   REGISTER USER
+   REGISTER + INVITE REWARD (POINTS ONLY)
 ======================= */
 app.post("/register", async (req, res) => {
-  const { phone } = req.body;
+  const { phone, inviteCode } = req.body;
 
   let user = await User.findOne({ phone });
 
   if (!user) {
-    user = await User.create({ phone, balance: 0 });
+    const myCode = "INV" + Math.floor(Math.random() * 99999);
+
+    user = await User.create({
+      phone,
+      inviteCode: myCode,
+      balance: 0,
+      invitedBy: inviteCode || null
+    });
+
+    // VIRTUAL reward (NOT CASH)
+    if (inviteCode) {
+      await User.updateOne(
+        { inviteCode },
+        { $inc: { balance: 5 } } // points only
+      );
+    }
   }
 
   res.json({ ok: true, user });
 });
 
 /* =======================
-   ADD BALANCE (ADMIN SIMULATION)
+   DEPOSIT / WITHDRAW (SIMULATION ONLY)
 ======================= */
-app.post("/add-balance", async (req, res) => {
+app.post("/deposit", async (req, res) => {
   const { phone, amount } = req.body;
 
   const user = await User.findOne({ phone });
-
   if (!user) return res.json({ ok: false });
 
   user.balance += amount;
@@ -70,10 +79,44 @@ app.post("/add-balance", async (req, res) => {
   res.json({ ok: true, balance: user.balance });
 });
 
+app.post("/withdraw", async (req, res) => {
+  const { phone, amount } = req.body;
+
+  const user = await User.findOne({ phone });
+
+  if (!user || user.balance < amount) {
+    return res.json({ ok: false, msg: "Insufficient balance" });
+  }
+
+  user.balance -= amount;
+  await user.save();
+
+  res.json({ ok: true, balance: user.balance });
+});
+
 /* =======================
-   BUY CARTELA (BET SYSTEM)
+   CARTELA
 ======================= */
-app.post("/buy-cartela", async (req, res) => {
+function generateCartela() {
+  let card = [];
+
+  for (let i = 0; i < 5; i++) {
+    let row = [];
+
+    for (let j = 0; j < 5; j++) {
+      row.push(Math.floor(Math.random() * 75) + 1);
+    }
+
+    card.push(row);
+  }
+
+  return card;
+}
+
+/* =======================
+   JOIN GAME / BUY CARTELA
+======================= */
+app.post("/buy", async (req, res) => {
   const { phone } = req.body;
 
   const user = await User.findOne({ phone });
@@ -91,30 +134,19 @@ app.post("/buy-cartela", async (req, res) => {
 
   await user.save();
 
-  res.json({
-    ok: true,
-    cartela: user.cartela,
-    balance: user.balance
-  });
+  res.json({ ok: true, cartela: user.cartela, balance: user.balance });
 });
 
 /* =======================
-   CARTELA GENERATOR
+   USERS
 ======================= */
-function generateCartela() {
-  let card = [];
-  for (let i = 0; i < 5; i++) {
-    let row = [];
-    for (let j = 0; j < 5; j++) {
-      row.push(Math.floor(Math.random() * 75) + 1);
-    }
-    card.push(row);
-  }
-  return card;
-}
+app.get("/users", async (req, res) => {
+  const users = await User.find();
+  res.json(users);
+});
 
 /* =======================
-   GAME SYSTEM (40 SEC START)
+   GAME ENGINE
 ======================= */
 let interval;
 let countdown;
@@ -145,35 +177,46 @@ io.on("connection", (socket) => {
 
     io.emit("start");
 
+    let numbers = [];
+
     interval = setInterval(() => {
 
       const num = Math.floor(Math.random() * 75) + 1;
 
+      numbers.push(num);
+
       io.emit("number", num);
+
+      if (numbers.length >= 75) {
+        clearInterval(interval);
+      }
 
     }, 4000);
 
   }
 
   socket.on("winner", (phone) => {
-    io.emit("winner", phone);
+
+    io.emit("gameEnd", {
+      msg: "🎉 GOOD BINGO",
+      winner: phone
+    });
+
+    clearInterval(interval);
   });
 
 });
 
 /* =======================
-   ADMIN USERS LIST
+   ADMIN PAGE
 ======================= */
-app.get("/admin/users", async (req, res) => {
-  const users = await User.find();
-  res.json(users);
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/admin.html"));
 });
 
 /* =======================
    SERVER
 ======================= */
-const PORT = process.env.PORT || 10000;
-
-server.listen(PORT, () => {
-  console.log("🚀 Bingo System Running on", PORT);
+server.listen(process.env.PORT || 10000, () => {
+  console.log("🚀 Bingo Safe System Running");
 });
