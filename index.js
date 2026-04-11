@@ -14,7 +14,7 @@ app.use(express.json());
 app.use(express.static("public"));
 
 /* =======================
-   MONGO
+   DB
 ======================= */
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
@@ -48,15 +48,13 @@ app.post("/register", async (req, res) => {
 
   let user = await User.findOne({ phone });
 
-  if (!user) {
-    user = await User.create({ phone });
-  }
+  if (!user) user = await User.create({ phone });
 
   res.json({ ok: true });
 });
 
 /* =======================
-   SEND TXID
+   TXID
 ======================= */
 app.post("/pay", async (req, res) => {
   const { phone } = req.body;
@@ -71,32 +69,26 @@ app.post("/pay", async (req, res) => {
 });
 
 /* =======================
+   ADMIN LIST USERS
+======================= */
+app.get("/admin/list", async (req, res) => {
+  const users = await User.find();
+  res.json(users);
+});
+
+/* =======================
    ADMIN APPROVE
 ======================= */
 app.post("/admin/approve/:phone", async (req, res) => {
   await User.findOneAndUpdate(
     { phone: req.params.phone },
-    { status: "approved" }
+    { status: "approved", balance: 100 }
   );
-
   res.json({ ok: true });
 });
 
 /* =======================
-   CHECK ACCESS
-======================= */
-app.get("/check/:phone", async (req, res) => {
-  const user = await User.findOne({ phone });
-
-  if (!user || user.status !== "approved") {
-    return res.json({ ok: false });
-  }
-
-  res.json({ ok: true });
-});
-
-/* =======================
-   CARTELA (REAL BINGO)
+   CARTELA
 ======================= */
 function rand(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -140,15 +132,13 @@ app.post("/join", async (req, res) => {
   const user = await User.findOne({ phone });
 
   if (!user || user.status !== "approved") {
-    return res.json({ ok: false, msg: "Not approved" });
+    return res.json({ ok: false });
   }
 
   user.cartela = generateCard();
   await user.save();
 
-  if (!players.includes(phone)) {
-    players.push(phone);
-  }
+  if (!players.includes(phone)) players.push(phone);
 
   io.emit("players", players);
 
@@ -161,30 +151,22 @@ app.post("/join", async (req, res) => {
 let called = [];
 let interval;
 
-/* WIN CHECK */
 function checkWin(card) {
-  const marks = card.map(row =>
-    row.map(n => n === "FREE" || called.includes(n))
+  const marks = card.map(r =>
+    r.map(n => n === "FREE" || called.includes(n))
   );
 
-  // rows
-  for (let r of marks) {
-    if (r.every(v => v)) return true;
-  }
+  for (let r of marks) if (r.every(v => v)) return true;
 
-  // cols
-  for (let c = 0; c < 5; c++) {
+  for (let c = 0; c < 5; c++)
     if (marks.every(r => r[c])) return true;
-  }
 
-  // diagonals
   if (marks.every((r,i)=>r[i])) return true;
   if (marks.every((r,i)=>r[4-i])) return true;
 
   return false;
 }
 
-/* DETECT WINNER */
 async function detectWinner() {
   const users = await User.find({ status: "approved" });
 
@@ -193,11 +175,9 @@ async function detectWinner() {
       return u.phone;
     }
   }
-
   return null;
 }
 
-/* COUNTDOWN */
 function startCountdown() {
   let t = 40;
   io.emit("countdown", t);
@@ -213,7 +193,6 @@ function startCountdown() {
   }, 1000);
 }
 
-/* START GAME */
 function startGame() {
   called = [];
   io.emit("start");
@@ -238,27 +217,18 @@ function startGame() {
 
       clearInterval(interval);
 
-      setTimeout(() => {
-        startCountdown();
-      }, 40000);
+      setTimeout(startCountdown, 40000);
     }
 
   }, 4000);
 }
 
-/* =======================
-   SOCKET
-======================= */
 io.on("connection", (socket) => {
-
-  socket.on("start", () => {
-    startCountdown();
-  });
-
+  socket.on("start", startCountdown);
 });
 
 /* =======================
-   ADMIN PAGE
+   ADMIN PAGE FIX
 ======================= */
 app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "public/admin.html"));
@@ -268,5 +238,5 @@ app.get("/admin", (req, res) => {
    SERVER
 ======================= */
 server.listen(process.env.PORT || 10000, () => {
-  console.log("🚀 FINAL BINGO SYSTEM RUNNING");
+  console.log("🚀 ADMIN PRO SYSTEM RUNNING");
 });
