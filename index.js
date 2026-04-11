@@ -14,16 +14,11 @@ app.use(express.json());
 app.use(express.static("public"));
 
 /* =======================
-   ENV CHECK
-======================= */
-console.log("BOT_TOKEN =", process.env.BOT_TOKEN);
-
-/* =======================
-   MONGO
+   DB
 ======================= */
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
-  .catch(err => console.log("Mongo error:", err));
+  .catch(err => console.log(err));
 
 /* =======================
    USER MODEL
@@ -31,32 +26,23 @@ mongoose.connect(process.env.MONGODB_URI)
 const userSchema = new mongoose.Schema({
   phone: String,
   balance: { type: Number, default: 0 },
-  cartela: Array
+  cartela: Array,
+  txid: String,
+  status: { type: String, default: "pending" } // pending / approved
 });
 
 const User = mongoose.model("User", userSchema);
 
 /* =======================
-   TELEGRAM WEBHOOK FIX
+   TELEGRAM WEBHOOK
 ======================= */
 app.post(`/bot${process.env.BOT_TOKEN}`, (req, res) => {
-  try {
-    const update = req.body;
-
-    if (update.message) {
-      const text = update.message.text;
-      console.log("📩 Telegram:", text);
-    }
-
-    res.json({ ok: true });
-  } catch (err) {
-    console.log(err);
-    res.status(200).end();
-  }
+  console.log("Telegram:", req.body);
+  res.json({ ok: true });
 });
 
 /* =======================
-   REGISTER USER
+   REGISTER
 ======================= */
 app.post("/register", async (req, res) => {
   const { phone } = req.body;
@@ -64,42 +50,80 @@ app.post("/register", async (req, res) => {
   let user = await User.findOne({ phone });
 
   if (!user) {
-    user = await User.create({ phone, balance: 0 });
+    user = await User.create({ phone });
   }
 
-  res.json({ ok: true, user });
+  res.json({ ok: true });
 });
 
 /* =======================
-   BALANCE
+   SEND TXID
 ======================= */
-app.get("/balance/:phone", async (req, res) => {
-  const user = await User.findOne({ phone: req.params.phone });
-  res.json({ balance: user ? user.balance : 0 });
-});
+app.post("/pay", async (req, res) => {
+  const { phone, txid } = req.body;
 
-/* =======================
-   DEPOSIT (SIMULATION)
-======================= */
-app.post("/deposit", async (req, res) => {
-  const { phone, amount } = req.body;
-
-  const user = await User.findOne({ phone });
-  if (!user) return res.json({ ok: false });
-
-  user.balance += Number(amount);
-  await user.save();
-
-  res.json({ ok: true, balance: user.balance });
-});
-
-/* =======================
-   CARTELA GENERATOR
-======================= */
-function generateCartela() {
-  return Array.from({ length: 5 }, () =>
-    Array.from({ length: 5 }, () => Math.floor(Math.random() * 75) + 1)
+  await User.findOneAndUpdate(
+    { phone },
+    { txid, status: "pending" }
   );
+
+  res.json({ ok: true, msg: "Waiting approval" });
+});
+
+/* =======================
+   ADMIN APPROVE
+======================= */
+app.post("/admin/approve/:phone", async (req, res) => {
+  await User.findOneAndUpdate(
+    { phone: req.params.phone },
+    { status: "approved", balance: 100 }
+  );
+
+  res.json({ ok: true });
+});
+
+/* =======================
+   CHECK ACCESS
+======================= */
+app.get("/check/:phone", async (req, res) => {
+  const user = await User.findOne({ phone });
+
+  if (!user || user.status !== "approved") {
+    return res.json({ ok: false });
+  }
+
+  res.json({ ok: true });
+});
+
+/* =======================
+   FIXED CARTELA (REAL BINGO)
+======================= */
+function getRandomUnique(min, max, count) {
+  let nums = [];
+  while (nums.length < count) {
+    let n = Math.floor(Math.random() * (max - min + 1)) + min;
+    if (!nums.includes(n)) nums.push(n);
+  }
+  return nums;
+}
+
+function generateCartela() {
+  const B = getRandomUnique(1, 15, 5);
+  const I = getRandomUnique(16, 30, 5);
+  const N = getRandomUnique(31, 45, 5);
+  const G = getRandomUnique(46, 60, 5);
+  const O = getRandomUnique(61, 75, 5);
+
+  let card = [];
+
+  for (let i = 0; i < 5; i++) {
+    card.push([B[i], I[i], N[i], G[i], O[i]]);
+  }
+
+  // FREE center
+  card[2][2] = "FREE";
+
+  return card;
 }
 
 /* =======================
@@ -109,18 +133,69 @@ app.post("/join", async (req, res) => {
   const { phone } = req.body;
 
   const user = await User.findOne({ phone });
-  if (!user) return res.json({ ok: false });
 
-  if (user.balance < 10) {
-    return res.json({ ok: false, msg: "Insufficient balance" });
+  if (!user || user.status !== "approved") {
+    return res.json({ ok: false, msg: "Not approved" });
   }
 
-  user.balance -= 10;
   user.cartela = generateCartela();
-
   await user.save();
 
-  res.json({ ok: true, cartela: user.cartela, balance: user.balance });
+  res.json({ ok: true, cartela: user.cartela });
+});
+
+/* =======================
+   SOCKET GAME
+======================= */
+let interval;
+
+io.on("connection", (socket) => {
+
+  socket.on("start", () => {
+
+    io.emit("countdown", 40);
+
+    let t = 40;
+
+    let timer = setInterval(() => {
+      t--;
+      io.emit("countdown", t);
+
+      if (t <= 0) {
+        clearInterval(timer);
+        startGame();
+      }
+    }, 1000);
+
+  });
+
+  function startGame() {
+
+    io.emit("start");
+
+    let numbers = [];
+
+    interval = setInterval(() => {
+
+      let num = Math.floor(Math.random() * 75) + 1;
+
+      if (!numbers.includes(num)) {
+        numbers.push(num);
+        io.emit("number", num);
+      }
+
+      if (numbers.length >= 75) clearInterval(interval);
+
+    }, 4000);
+
+  }
+
+  socket.on("winner", (phone) => {
+    io.emit("winner", phone);
+    io.emit("gameEnd", "🎉 GOOD BINGO");
+    clearInterval(interval);
+  });
+
 });
 
 /* =======================
@@ -131,61 +206,8 @@ app.get("/admin", (req, res) => {
 });
 
 /* =======================
-   SOCKET GAME ENGINE
+   SERVER
 ======================= */
-let interval;
-let countdown;
-
-io.on("connection", (socket) => {
-
-  socket.on("start", () => {
-
-    let t = 40;
-    io.emit("countdown", t);
-
-    countdown = setInterval(() => {
-
-      t--;
-      io.emit("countdown", t);
-
-      if (t <= 0) {
-        clearInterval(countdown);
-        startGame();
-      }
-
-    }, 1000);
-
-  });
-
-  function startGame() {
-
-    io.emit("gameStart");
-
-    let numbers = [];
-
-    interval = setInterval(() => {
-
-      const num = Math.floor(Math.random() * 75) + 1;
-
-      numbers.push(num);
-
-      io.emit("number", num);
-
-      if (numbers.length >= 75) {
-        clearInterval(interval);
-      }
-
-    }, 4000);
-
-  }
-
-});
-
-/* =======================
-   SERVER START
-======================= */
-const PORT = process.env.PORT || 10000;
-
-server.listen(PORT, () => {
-  console.log("🚀 Bingo system running on port", PORT);
+server.listen(process.env.PORT || 10000, () => {
+  console.log("🚀 Bingo Fixed Running");
 });
