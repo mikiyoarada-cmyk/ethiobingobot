@@ -13,9 +13,6 @@ const io = new Server(server);
 app.use(express.json());
 app.use(express.static("public"));
 
-/* =======================
-   DB
-======================= */
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
   .catch(err => console.log(err));
@@ -25,94 +22,58 @@ mongoose.connect(process.env.MONGODB_URI)
 ======================= */
 const userSchema = new mongoose.Schema({
   phone: String,
-  balance: { type: Number, default: 0 },
   cartela: Array,
-  txid: String,
-  status: { type: String, default: "pending" } // pending / approved
+  status: { type: String, default: "pending" },
+  balance: { type: Number, default: 0 }
 });
 
 const User = mongoose.model("User", userSchema);
 
 /* =======================
-   TELEGRAM WEBHOOK
-======================= */
-app.post(`/bot${process.env.BOT_TOKEN}`, (req, res) => {
-  console.log("Telegram:", req.body);
-  res.json({ ok: true });
-});
-
-/* =======================
-   REGISTER
-======================= */
-app.post("/register", async (req, res) => {
-  const { phone } = req.body;
-
-  let user = await User.findOne({ phone });
-
-  if (!user) {
-    user = await User.create({ phone });
-  }
-
-  res.json({ ok: true });
-});
-
-/* =======================
-   SEND TXID
+   APPROVAL SYSTEM
 ======================= */
 app.post("/pay", async (req, res) => {
-  const { phone, txid } = req.body;
+  const { phone } = req.body;
 
   await User.findOneAndUpdate(
     { phone },
-    { txid, status: "pending" }
+    { status: "pending" },
+    { upsert: true }
   );
 
-  res.json({ ok: true, msg: "Waiting approval" });
+  res.json({ ok: true });
 });
 
-/* =======================
-   ADMIN APPROVE
-======================= */
 app.post("/admin/approve/:phone", async (req, res) => {
   await User.findOneAndUpdate(
     { phone: req.params.phone },
-    { status: "approved", balance: 100 }
+    { status: "approved" }
   );
-
   res.json({ ok: true });
 });
 
 /* =======================
-   CHECK ACCESS
+   BINGO CARD (NO DUPLICATE)
 ======================= */
-app.get("/check/:phone", async (req, res) => {
-  const user = await User.findOne({ phone });
-
-  if (!user || user.status !== "approved") {
-    return res.json({ ok: false });
-  }
-
-  res.json({ ok: true });
-});
-
-/* =======================
-   FIXED CARTELA (REAL BINGO)
-======================= */
-function getRandomUnique(min, max, count) {
-  let nums = [];
-  while (nums.length < count) {
-    let n = Math.floor(Math.random() * (max - min + 1)) + min;
-    if (!nums.includes(n)) nums.push(n);
-  }
-  return nums;
+function rand(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function generateCartela() {
-  const B = getRandomUnique(1, 15, 5);
-  const I = getRandomUnique(16, 30, 5);
-  const N = getRandomUnique(31, 45, 5);
-  const G = getRandomUnique(46, 60, 5);
-  const O = getRandomUnique(61, 75, 5);
+function unique(min, max) {
+  let arr = [];
+  while (arr.length < 5) {
+    let n = rand(min, max);
+    if (!arr.includes(n)) arr.push(n);
+  }
+  return arr;
+}
+
+function generateCard() {
+  const B = unique(1,15);
+  const I = unique(16,30);
+  const N = unique(31,45);
+  const G = unique(46,60);
+  const O = unique(61,75);
 
   let card = [];
 
@@ -120,9 +81,7 @@ function generateCartela() {
     card.push([B[i], I[i], N[i], G[i], O[i]]);
   }
 
-  // FREE center
   card[2][2] = "FREE";
-
   return card;
 }
 
@@ -135,67 +94,113 @@ app.post("/join", async (req, res) => {
   const user = await User.findOne({ phone });
 
   if (!user || user.status !== "approved") {
-    return res.json({ ok: false, msg: "Not approved" });
+    return res.json({ ok: false });
   }
 
-  user.cartela = generateCartela();
+  user.cartela = generateCard();
   await user.save();
 
   res.json({ ok: true, cartela: user.cartela });
 });
 
 /* =======================
-   SOCKET GAME
+   GAME ENGINE
 ======================= */
+let called = [];
 let interval;
+let players = [];
 
-io.on("connection", (socket) => {
+function checkWin(card) {
+  const marks = card.map(row =>
+    row.map(n => n === "FREE" || called.includes(n))
+  );
 
-  socket.on("start", () => {
-
-    io.emit("countdown", 40);
-
-    let t = 40;
-
-    let timer = setInterval(() => {
-      t--;
-      io.emit("countdown", t);
-
-      if (t <= 0) {
-        clearInterval(timer);
-        startGame();
-      }
-    }, 1000);
-
-  });
-
-  function startGame() {
-
-    io.emit("start");
-
-    let numbers = [];
-
-    interval = setInterval(() => {
-
-      let num = Math.floor(Math.random() * 75) + 1;
-
-      if (!numbers.includes(num)) {
-        numbers.push(num);
-        io.emit("number", num);
-      }
-
-      if (numbers.length >= 75) clearInterval(interval);
-
-    }, 4000);
-
+  // rows
+  for (let r of marks) {
+    if (r.every(v => v)) return true;
   }
 
-  socket.on("winner", (phone) => {
-    io.emit("winner", phone);
-    io.emit("gameEnd", "🎉 GOOD BINGO");
-    clearInterval(interval);
-  });
+  // cols
+  for (let c = 0; c < 5; c++) {
+    if (marks.every(r => r[c])) return true;
+  }
 
+  // diagonals
+  if (marks.every((r,i)=>r[i])) return true;
+  if (marks.every((r,i)=>r[4-i])) return true;
+
+  return false;
+}
+
+async function detectWinner() {
+  const users = await User.find({ status: "approved" });
+
+  for (let u of users) {
+    if (checkWin(u.cartela)) {
+      return u.phone;
+    }
+  }
+
+  return null;
+}
+
+function startCountdown() {
+  let t = 40;
+  io.emit("countdown", t);
+
+  let cd = setInterval(() => {
+    t--;
+    io.emit("countdown", t);
+
+    if (t <= 0) {
+      clearInterval(cd);
+      startGame();
+    }
+  }, 1000);
+}
+
+function startGame() {
+  called = [];
+  io.emit("start");
+
+  interval = setInterval(async () => {
+
+    let num;
+    do {
+      num = rand(1,75);
+    } while (called.includes(num));
+
+    called.push(num);
+    io.emit("number", num);
+
+    const winner = await detectWinner();
+
+    if (winner) {
+      io.emit("winner", winner);
+      io.emit("gameEnd", "🎉 GOOD BINGO");
+
+      clearInterval(interval);
+
+      // simulate pot split (NOT REAL MONEY)
+      let pot = players.length * 10;
+      let userShare = Math.floor(pot * 0.8);
+      let adminShare = Math.floor(pot * 0.2);
+
+      console.log("Winner:", winner);
+      console.log("User share:", userShare);
+      console.log("Admin share:", adminShare);
+
+      setTimeout(startCountdown, 40000);
+    }
+
+  }, 4000);
+}
+
+/* =======================
+   SOCKET
+======================= */
+io.on("connection", (socket) => {
+  socket.on("start", startCountdown);
 });
 
 /* =======================
@@ -209,5 +214,5 @@ app.get("/admin", (req, res) => {
    SERVER
 ======================= */
 server.listen(process.env.PORT || 10000, () => {
-  console.log("🚀 Bingo Fixed Running");
+  console.log("🚀 AUTO BINGO RUNNING");
 });
