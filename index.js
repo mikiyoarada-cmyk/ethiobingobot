@@ -13,6 +13,9 @@ const io = new Server(server);
 app.use(express.json());
 app.use(express.static("public"));
 
+/* =======================
+   MONGO
+======================= */
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
   .catch(err => console.log(err));
@@ -30,7 +33,30 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.model("User", userSchema);
 
 /* =======================
-   APPROVAL SYSTEM
+   TELEGRAM WEBHOOK
+======================= */
+app.post(`/bot${process.env.BOT_TOKEN}`, (req, res) => {
+  console.log("Telegram:", req.body);
+  res.json({ ok: true });
+});
+
+/* =======================
+   REGISTER
+======================= */
+app.post("/register", async (req, res) => {
+  const { phone } = req.body;
+
+  let user = await User.findOne({ phone });
+
+  if (!user) {
+    user = await User.create({ phone });
+  }
+
+  res.json({ ok: true });
+});
+
+/* =======================
+   SEND TXID
 ======================= */
 app.post("/pay", async (req, res) => {
   const { phone } = req.body;
@@ -44,16 +70,33 @@ app.post("/pay", async (req, res) => {
   res.json({ ok: true });
 });
 
+/* =======================
+   ADMIN APPROVE
+======================= */
 app.post("/admin/approve/:phone", async (req, res) => {
   await User.findOneAndUpdate(
     { phone: req.params.phone },
     { status: "approved" }
   );
+
   res.json({ ok: true });
 });
 
 /* =======================
-   BINGO CARD (NO DUPLICATE)
+   CHECK ACCESS
+======================= */
+app.get("/check/:phone", async (req, res) => {
+  const user = await User.findOne({ phone });
+
+  if (!user || user.status !== "approved") {
+    return res.json({ ok: false });
+  }
+
+  res.json({ ok: true });
+});
+
+/* =======================
+   CARTELA (REAL BINGO)
 ======================= */
 function rand(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -82,23 +125,32 @@ function generateCard() {
   }
 
   card[2][2] = "FREE";
+
   return card;
 }
 
 /* =======================
    JOIN GAME
 ======================= */
+let players = [];
+
 app.post("/join", async (req, res) => {
   const { phone } = req.body;
 
   const user = await User.findOne({ phone });
 
   if (!user || user.status !== "approved") {
-    return res.json({ ok: false });
+    return res.json({ ok: false, msg: "Not approved" });
   }
 
   user.cartela = generateCard();
   await user.save();
+
+  if (!players.includes(phone)) {
+    players.push(phone);
+  }
+
+  io.emit("players", players);
 
   res.json({ ok: true, cartela: user.cartela });
 });
@@ -108,8 +160,8 @@ app.post("/join", async (req, res) => {
 ======================= */
 let called = [];
 let interval;
-let players = [];
 
+/* WIN CHECK */
 function checkWin(card) {
   const marks = card.map(row =>
     row.map(n => n === "FREE" || called.includes(n))
@@ -132,11 +184,12 @@ function checkWin(card) {
   return false;
 }
 
+/* DETECT WINNER */
 async function detectWinner() {
   const users = await User.find({ status: "approved" });
 
   for (let u of users) {
-    if (checkWin(u.cartela)) {
+    if (u.cartela && checkWin(u.cartela)) {
       return u.phone;
     }
   }
@@ -144,6 +197,7 @@ async function detectWinner() {
   return null;
 }
 
+/* COUNTDOWN */
 function startCountdown() {
   let t = 40;
   io.emit("countdown", t);
@@ -159,6 +213,7 @@ function startCountdown() {
   }, 1000);
 }
 
+/* START GAME */
 function startGame() {
   called = [];
   io.emit("start");
@@ -171,7 +226,9 @@ function startGame() {
     } while (called.includes(num));
 
     called.push(num);
+
     io.emit("number", num);
+    io.emit("calledList", called);
 
     const winner = await detectWinner();
 
@@ -181,16 +238,9 @@ function startGame() {
 
       clearInterval(interval);
 
-      // simulate pot split (NOT REAL MONEY)
-      let pot = players.length * 10;
-      let userShare = Math.floor(pot * 0.8);
-      let adminShare = Math.floor(pot * 0.2);
-
-      console.log("Winner:", winner);
-      console.log("User share:", userShare);
-      console.log("Admin share:", adminShare);
-
-      setTimeout(startCountdown, 40000);
+      setTimeout(() => {
+        startCountdown();
+      }, 40000);
     }
 
   }, 4000);
@@ -200,7 +250,11 @@ function startGame() {
    SOCKET
 ======================= */
 io.on("connection", (socket) => {
-  socket.on("start", startCountdown);
+
+  socket.on("start", () => {
+    startCountdown();
+  });
+
 });
 
 /* =======================
@@ -214,5 +268,5 @@ app.get("/admin", (req, res) => {
    SERVER
 ======================= */
 server.listen(process.env.PORT || 10000, () => {
-  console.log("🚀 AUTO BINGO RUNNING");
+  console.log("🚀 FINAL BINGO SYSTEM RUNNING");
 });
