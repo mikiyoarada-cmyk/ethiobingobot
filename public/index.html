@@ -1,13 +1,47 @@
 <!DOCTYPE html>
 <html>
+<head>
+<title>Bingo</title>
+
+<style>
+body { font-family: Arial; text-align:center; }
+
+/* CARD GRID */
+.grid {
+  display:grid;
+  grid-template-columns: repeat(5,60px);
+  gap:5px;
+  justify-content:center;
+  margin-top:10px;
+}
+
+/* CELLS */
+.cell {
+  border:1px solid black;
+  padding:10px;
+  font-weight:bold;
+}
+
+/* HEADER */
+.header {
+  display:grid;
+  grid-template-columns: repeat(5,60px);
+  justify-content:center;
+  margin-top:10px;
+  font-weight:bold;
+  font-size:18px;
+}
+</style>
+</head>
+
 <body>
 
-<h2>BINGO</h2>
+<h2>🎯 BINGO</h2>
 
 <input id="phone" placeholder="Phone">
 <button onclick="startApp()">Start</button>
 
-<h3>Balance: <span id="bal">0</span></h3>
+<h3>💰 Balance: <span id="bal">0</span></h3>
 
 <button onclick="deposit()">Deposit 50</button>
 <button onclick="join()">Pick Cartela</button>
@@ -24,12 +58,23 @@
 <h3>🏆 Winner</h3>
 <div id="winner"></div>
 
-<h3>🎯 Card</h3>
-<div id="card"></div>
+<h3>🎮 Your Cartela</h3>
+
+<!-- ✅ FIXED HEADER -->
+<div class="header">
+  <div>B</div>
+  <div>I</div>
+  <div>N</div>
+  <div>G</div>
+  <div>O</div>
+</div>
+
+<!-- CARD -->
+<div id="card" class="grid"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const socket=io();
+const socket = io();
 
 let phone="";
 let card=[];
@@ -38,7 +83,11 @@ let called=[];
 async function startApp(){
   phone=document.getElementById("phone").value;
 
-  await fetch("/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})});
+  await fetch("/register",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({phone})
+  });
 
   loadBalance();
 }
@@ -50,12 +99,22 @@ async function loadBalance(){
 }
 
 async function deposit(){
-  await fetch("/deposit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,amount:50})});
+  await fetch("/deposit",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({phone,amount:50})
+  });
+
   loadBalance();
 }
 
 async function join(){
-  const res=await fetch("/join",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})});
+  const res=await fetch("/join",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({phone})
+  });
+
   const data=await res.json();
 
   if(!data.ok){
@@ -68,11 +127,12 @@ async function join(){
   loadBalance();
 }
 
+/* ✅ FIXED CARD RENDER */
 function renderCard(){
-  let html="<b>B I N G O</b><br>";
+  let html="";
 
-  card.forEach(r=>{
-    html+=r.join(" | ")+"<br>";
+  card.flat().forEach(n=>{
+    html+=`<div class="cell">${n}</div>`;
   });
 
   document.getElementById("card").innerHTML=html;
@@ -82,12 +142,9 @@ function startGame(){
   socket.emit("start");
 }
 
+/* SOCKET EVENTS */
 socket.on("countdown",t=>{
   document.getElementById("count").innerText=t;
-});
-
-socket.on("number",n=>{
-  called.push(n);
 });
 
 socket.on("called",list=>{
