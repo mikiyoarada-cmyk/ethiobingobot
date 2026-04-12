@@ -1,97 +1,219 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Bingo</title>
-<style>
-.grid{display:grid;grid-template-columns:repeat(5,60px);gap:5px}
-.cell{border:1px solid black;padding:10px;text-align:center}
-.mark{background:yellow}
-</style>
+  <style>
+    .card {
+      border: 2px solid black;
+      margin: 6px;
+      padding: 6px;
+      display: inline-block;
+      width: 160px;
+      font-size: 12px;
+    }
+
+    .cell {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      text-align: center;
+      margin: 1px;
+    }
+
+    .hit {
+      background: green;
+      color: white;
+    }
+
+    #cards {
+      display: flex;
+      flex-wrap: wrap;
+    }
+  </style>
 </head>
 
 <body>
 
-<h1>B I N G O</h1>
+<h1>Bingo Live</h1>
 
-<input id="phone" placeholder="phone">
-<button onclick="join()">Join</button>
+<button onclick="start()">Start Game</button>
 
-<h3 id="balance"></h3>
-<h2 id="count"></h2>
+<h2 id="num">-</h2>
 
-<div class="grid" id="card"></div>
+<h3>Called Numbers:</h3>
+<div id="history"></div>
 
-<h3 id="called"></h3>
-<h2 id="winner"></h2>
+<h3>🏆 Winner:</h3>
+<div id="winner"></div>
+
+<h3>Cartelas (600)</h3>
+<div id="cards"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const socket=io();
-let card=[];
+const socket = io();
 
-async function join(){
-  const phone=document.getElementById("phone").value;
+let called = [];
+let queue = [];
+let playing = false;
+let cards = [];
 
-  const res=await fetch("/join",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({phone})
+// PREFIX
+function getPrefix(num) {
+  if (num <= 15) return "B";
+  if (num <= 30) return "I";
+  if (num <= 45) return "N";
+  if (num <= 60) return "G";
+  return "O";
+}
+
+// CHECK WINNER
+function checkCardWin(card) {
+  for (let r = 0; r < 5; r++) {
+    let win = true;
+    for (let c = 0; c < 5; c++) {
+      if (!called.includes(card.data[r][c])) {
+        win = false;
+        break;
+      }
+    }
+    if (win) return true;
+  }
+  return false;
+}
+
+// PLAY QUEUE
+async function playQueue() {
+  if (playing || queue.length === 0) return;
+
+  playing = true;
+
+  const num = queue.shift();
+  const prefix = getPrefix(num);
+
+  document.getElementById('num').innerText = prefix + "-" + num;
+
+  called.push(num);
+
+  document.getElementById('history').innerText =
+    called.map(n => getPrefix(n) + "-" + n).join(', ');
+
+  // highlight cards
+  highlightCards();
+
+  // winner check
+  checkWinner();
+
+  let audio = new Audio(`voices/${prefix}${num}.mp3`);
+
+  try { await audio.play(); } catch(e) {}
+
+  await new Promise(r => audio.onended = r);
+
+  await new Promise(r => setTimeout(r, 3000));
+
+  playing = false;
+  playQueue();
+}
+
+// HIGHLIGHT NUMBERS
+function highlightCards() {
+  cards.forEach(card => {
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        const val = card.data[r][c];
+        const el = document.getElementById(`c-${card.id}-${r}-${c}`);
+        if (called.includes(val)) {
+          el.classList.add("hit");
+        }
+      }
+    }
   });
+}
 
-  const data=await res.json();
+// WINNER CHECK
+function checkWinner() {
+  cards.forEach(card => {
+    if (!card.won && checkCardWin(card)) {
+      card.won = true;
+      socket.emit("winner", card.id);
+    }
+  });
+}
 
-  if(!data.ok){
-    alert(data.msg);
-    return;
+// GENERATE CARDS
+function generateCards() {
+  for (let i = 1; i <= 600; i++) {
+    let card = [];
+
+    for (let r = 0; r < 5; r++) {
+      let row = [];
+      for (let c = 0; c < 5; c++) {
+        row.push(Math.floor(Math.random() * 75) + 1);
+      }
+      card.push(row);
+    }
+
+    cards.push({ id: i, data: card, won: false });
   }
 
-  card=data.cartela;
-  document.getElementById("balance").innerText="Balance "+data.balance;
-
-  draw();
+  renderCards();
 }
 
-function draw(){
-  const grid=document.getElementById("card");
-  grid.innerHTML="";
+// RENDER
+function renderCards() {
+  let html = "";
 
-  card.forEach(r=>{
-    r.forEach(c=>{
-      const d=document.createElement("div");
-      d.className="cell";
-      d.innerText=c;
-      grid.appendChild(d);
-    });
+  cards.forEach(c => {
+    html += `<div class="card">
+      <b>Card ${c.id}</b><br>`;
+
+    for (let r = 0; r < 5; r++) {
+      for (let c2 = 0; c2 < 5; c2++) {
+        html += `<span class="cell" id="c-${c.id}-${r}-${c2}">
+          ${c.data[r][c2]}
+        </span>`;
+      }
+      html += "<br>";
+    }
+
+    html += `</div>`;
   });
+
+  document.getElementById('cards').innerHTML = html;
 }
 
-function mark(n){
-  document.querySelectorAll(".cell").forEach(c=>{
-    if(c.innerText==n) c.classList.add("mark");
-  });
+// START GAME
+socket.on('start', async () => {
+  called = [];
+  queue = [];
+  document.getElementById('history').innerText = "";
+  document.getElementById('winner').innerText = "";
+
+  if (cards.length === 0) generateCards();
+
+  let startAudio = new Audio("voices/start.mp3");
+  await startAudio.play();
+  await new Promise(r => startAudio.onended = r);
+
+  playQueue();
+});
+
+// RECEIVE NUMBERS
+socket.on('number', (num) => {
+  queue.push(num);
+  playQueue();
+});
+
+// WINNER EVENT
+socket.on("winner", (id) => {
+  document.getElementById("winner").innerText =
+    "🏆 Card " + id + " WINS!";
+});
+
+// START BUTTON
+function start() {
+  socket.emit('start');
 }
-
-socket.on("countdown",t=>{
-  document.getElementById("count").innerText="Start in "+t;
-});
-
-socket.on("number",n=>{
-  mark(n);
-});
-
-socket.on("called",arr=>{
-  document.getElementById("called").innerText=arr.join(",");
-});
-
-socket.on("winner",w=>{
-  document.getElementById("winner").innerText="WINNER "+w.phone;
-});
-
-socket.on("message",m=>{
-  alert(m);
-});
-
-socket.emit("start");
 </script>
 
 </body>
