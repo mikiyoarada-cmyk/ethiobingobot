@@ -4,52 +4,54 @@
 <style>
 body{text-align:center;font-family:Arial}
 
-.cards{
-  display:flex;
-  flex-wrap:wrap;
-  justify-content:center;
-}
-
 .card{
   border:2px solid black;
-  margin:5px;
-  padding:5px;
+  width:200px;
+  margin:auto;
 }
 
 .header{
   display:grid;
-  grid-template-columns:repeat(5,30px);
+  grid-template-columns:repeat(5,1fr);
   font-weight:bold;
+  background:#ddd;
 }
 
 .grid{
   display:grid;
-  grid-template-columns:repeat(5,30px);
+  grid-template-columns:repeat(5,1fr);
 }
 
 .cell{
   border:1px solid black;
-  padding:5px;
+  padding:10px;
 }
 </style>
 </head>
 
 <body>
 
+<h2>BINGO</h2>
+
 <input id="phone" placeholder="Phone">
+<input id="txid" placeholder="TXID">
+
 <button onclick="startApp()">Start</button>
+<button onclick="pay()">Send Payment</button>
 <button onclick="join()">Pick Cartela (10 ETB)</button>
 <button onclick="startGame()">Start Game</button>
 
 <h3>Balance: <span id="bal">0</span></h3>
 <h3 id="count"></h3>
 
-<div id="cards" class="cards"></div>
+<div id="card"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket=io();
+
 let phone="";
+let card=[];
 
 async function startApp(){
   phone=document.getElementById("phone").value;
@@ -61,6 +63,18 @@ async function startApp(){
   });
 
   loadBalance();
+}
+
+async function pay(){
+  const txid=document.getElementById("txid").value;
+
+  await fetch("/pay",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({phone,txid})
+  });
+
+  alert("Sent to admin");
 }
 
 async function loadBalance(){
@@ -83,15 +97,14 @@ async function join(){
     return;
   }
 
-  showCards(data.cartela);
+  card=data.cartela;
+  renderCard();
   loadBalance();
 }
 
-/* ===== SHOW 1 CARD CORRECTLY ===== */
-function showCards(card){
-  let html="";
-
-  html+=`
+/* ===== CARD WITH HEADER ===== */
+function renderCard(){
+  let html=`
   <div class="card">
     <div class="header">
       <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
@@ -101,7 +114,7 @@ function showCards(card){
     </div>
   </div>`;
 
-  document.getElementById("cards").innerHTML=html;
+  document.getElementById("card").innerHTML=html;
 }
 
 function startGame(){

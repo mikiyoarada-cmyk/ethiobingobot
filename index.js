@@ -5,6 +5,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const path = require("path");
+const TelegramBot = require("node-telegram-bot-api");
 
 const app = express();
 const server = http.createServer(app);
@@ -18,12 +19,21 @@ mongoose.connect(process.env.MONGODB_URI)
 .then(()=>console.log("MongoDB connected"))
 .catch(err=>console.log(err));
 
+/* ================= TELEGRAM ================= */
+const bot = new TelegramBot(process.env.BOT_TOKEN);
+
+app.post("/bot", (req,res)=>{
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
 /* ================= MODEL ================= */
 const User = mongoose.model("User", new mongoose.Schema({
   phone:String,
-  balance:{type:Number,default:0},
   status:{type:String,default:"pending"},
-  cartela:Array
+  balance:{type:Number,default:0},
+  cartela:Array,
+  txid:String
 }));
 
 /* ================= REGISTER ================= */
@@ -33,13 +43,48 @@ app.post("/register", async(req,res)=>{
   res.json({ok:true});
 });
 
-/* ================= PAYMENT APPROVE ================= */
-app.post("/admin/approve/:phone", async(req,res)=>{
+/* ================= PAYMENT ================= */
+app.post("/pay", async(req,res)=>{
+  const {phone,txid}=req.body;
+
   await User.findOneAndUpdate(
-    {phone:req.params.phone},
-    {status:"approved",balance:100} // give balance
+    {phone},
+    {txid,status:"pending"},
+    {upsert:true}
   );
+
+  bot.sendMessage(process.env.ADMIN_ID,
+`💰 Payment Request
+Phone: ${phone}
+TXID: ${txid}`,
+{
+reply_markup:{
+inline_keyboard:[[
+{text:"✅ Approve",callback_data:`approve_${phone}`},
+{text:"❌ Reject",callback_data:`reject_${phone}`}
+]]
+}
+});
+
   res.json({ok:true});
+});
+
+/* ================= BOT BUTTON ================= */
+bot.on("callback_query", async(q)=>{
+  const phone = q.data.split("_")[1];
+
+  if(q.data.startsWith("approve")){
+    await User.findOneAndUpdate({phone},{
+      status:"approved",
+      balance:100
+    });
+    bot.sendMessage(q.message.chat.id,"✅ Approved "+phone);
+  }
+
+  if(q.data.startsWith("reject")){
+    await User.findOneAndUpdate({phone},{status:"rejected"});
+    bot.sendMessage(q.message.chat.id,"❌ Rejected "+phone);
+  }
 });
 
 /* ================= BALANCE ================= */
@@ -48,25 +93,24 @@ app.get("/balance/:phone", async(req,res)=>{
   res.json({balance:user?user.balance:0});
 });
 
-/* ================= REAL BINGO CARD (NO DUPLICATE) ================= */
-function columnNumbers(min,max){
-  let nums=[];
-  while(nums.length<5){
+/* ================= BINGO CARD (NO DUPLICATE) ================= */
+function getUnique(min,max){
+  let arr=[];
+  while(arr.length<5){
     let n=Math.floor(Math.random()*(max-min+1))+min;
-    if(!nums.includes(n)) nums.push(n);
+    if(!arr.includes(n)) arr.push(n);
   }
-  return nums.sort((a,b)=>a-b);
+  return arr.sort((a,b)=>a-b);
 }
 
 function generateCard(){
-  const B=columnNumbers(1,15);
-  const I=columnNumbers(16,30);
-  const N=columnNumbers(31,45);
-  const G=columnNumbers(46,60);
-  const O=columnNumbers(61,75);
+  const B=getUnique(1,15);
+  const I=getUnique(16,30);
+  const N=getUnique(31,45);
+  const G=getUnique(46,60);
+  const O=getUnique(61,75);
 
   let card=[];
-
   for(let i=0;i<5;i++){
     card.push([B[i],I[i],N[i],G[i],O[i]]);
   }
@@ -75,7 +119,7 @@ function generateCard(){
   return card;
 }
 
-/* ================= JOIN GAME ================= */
+/* ================= JOIN ================= */
 let players=[];
 
 app.post("/join", async(req,res)=>{
@@ -87,12 +131,12 @@ app.post("/join", async(req,res)=>{
     return res.json({ok:false,msg:"Not approved"});
   }
 
-  if(user.balance < 10){
+  if(user.balance<10){
     return res.json({ok:false,msg:"Insufficient balance"});
   }
 
-  user.balance -= 10;
-  user.cartela = generateCard();
+  user.balance-=10;
+  user.cartela=generateCard();
   await user.save();
 
   if(!players.includes(phone)) players.push(phone);
@@ -146,5 +190,5 @@ io.on("connection",(socket)=>{
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FIXED BINGO RUNNING");
+  console.log("🚀 FULL SYSTEM RUNNING");
 });
