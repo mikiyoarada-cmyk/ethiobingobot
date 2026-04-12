@@ -14,18 +14,18 @@ const io = new Server(server);
 app.use(express.json());
 app.use(express.static("public"));
 
+/* ================= ENV ================= */
+const TOKEN = process.env.TOKEN;
+const ADMIN_ID = process.env.ADMIN_ID;
+const MONGO = process.env.MONGO_URL;
+
 /* ================= DB ================= */
-mongoose.connect(process.env.MONGODB_URI)
-.then(()=>console.log("MongoDB connected"))
+mongoose.connect(MONGO)
+.then(()=>console.log("✅ MongoDB Connected"))
 .catch(err=>console.log(err));
 
-/* ================= BOT (IMPORTANT FIX WEBHOOK) ================= */
-const bot = new TelegramBot(process.env.BOT_TOKEN);
-
-app.post("/bot", (req,res)=>{
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
+/* ================= BOT ================= */
+const bot = new TelegramBot(TOKEN, { polling: true });
 
 /* ================= USER ================= */
 const User = mongoose.model("User", new mongoose.Schema({
@@ -36,42 +36,44 @@ const User = mongoose.model("User", new mongoose.Schema({
   txid:String
 }));
 
-/* ================= ADMIN ROUTES ================= */
+/* ================= ADMIN ================= */
 app.get("/admin", (req,res)=>{
   res.sendFile(path.join(__dirname,"public/admin.html"));
 });
 
 app.get("/admin/list", async(req,res)=>{
-  const users = await User.find();
-  res.json(users);
+  res.json(await User.find());
 });
 
 app.post("/admin/approve/:phone", async(req,res)=>{
+  const phone = req.params.phone;
+
   await User.findOneAndUpdate(
-    {phone:req.params.phone},
+    {phone},
     {status:"approved",balance:100}
   );
+
+  bot.sendMessage(ADMIN_ID, "✅ Approved " + phone);
+
   res.json({ok:true});
 });
 
 app.post("/admin/reject/:phone", async(req,res)=>{
+  const phone = req.params.phone;
+
   await User.findOneAndUpdate(
-    {phone:req.params.phone},
+    {phone},
     {status:"rejected"}
   );
-  res.json({ok:true});
-});
 
-/* ================= REGISTER ================= */
-app.post("/register", async(req,res)=>{
-  const {phone}=req.body;
-  await User.findOneAndUpdate({phone},{},{upsert:true});
+  bot.sendMessage(ADMIN_ID, "❌ Rejected " + phone);
+
   res.json({ok:true});
 });
 
 /* ================= PAYMENT ================= */
 app.post("/pay", async(req,res)=>{
-  const {phone,txid}=req.body;
+  const {phone,txid} = req.body;
 
   await User.findOneAndUpdate(
     {phone},
@@ -79,84 +81,86 @@ app.post("/pay", async(req,res)=>{
     {upsert:true}
   );
 
-  bot.sendMessage(process.env.ADMIN_ID,
+  bot.sendMessage(ADMIN_ID,
 `💰 PAYMENT REQUEST
+
 Phone: ${phone}
 TXID: ${txid}`,
 {
-reply_markup:{
-inline_keyboard:[[
-{text:"✅ Approve",callback_data:`approve:${phone}`},
-{text:"❌ Reject",callback_data:`reject:${phone}`}
-]]
-}
+  reply_markup:{
+    inline_keyboard:[[
+      {text:"✅ Approve",callback_data:`approve_${phone}`},
+      {text:"❌ Reject",callback_data:`reject_${phone}`}
+    ]]
+  }
 });
 
   res.json({ok:true});
 });
 
-/* ================= BOT BUTTON FIX (IMPORTANT) ================= */
+/* ================= BOT BUTTON FIX ================= */
 bot.on("callback_query", async(q)=>{
   const data = q.data;
+  const phone = data.split("_")[1];
 
-  const [action, phone] = data.split(":");
-
-  if(action === "approve"){
+  if(data.startsWith("approve")){
     await User.findOneAndUpdate(
       {phone},
       {status:"approved",balance:100}
     );
-    bot.answerCallbackQuery(q.id,"Approved ✅");
+
+    bot.answerCallbackQuery(q.id,{text:"Approved"});
     bot.sendMessage(q.message.chat.id,"✅ Approved " + phone);
   }
 
-  if(action === "reject"){
+  if(data.startsWith("reject")){
     await User.findOneAndUpdate(
       {phone},
       {status:"rejected"}
     );
-    bot.answerCallbackQuery(q.id,"Rejected ❌");
+
+    bot.answerCallbackQuery(q.id,{text:"Rejected"});
     bot.sendMessage(q.message.chat.id,"❌ Rejected " + phone);
   }
 });
 
 /* ================= BALANCE ================= */
 app.get("/balance/:phone", async(req,res)=>{
-  const user=await User.findOne({phone:req.params.phone});
-  res.json({balance:user?user.balance:0});
+  const user = await User.findOne({phone:req.params.phone});
+  res.json({balance:user ? user.balance : 0});
 });
 
-/* ================= FIXED BINGO CARD (NO DUPLICATES) ================= */
-function generateUnique(min,max){
-  let set=new Set();
-  while(set.size<5){
-    set.add(Math.floor(Math.random()*(max-min+1))+min);
+/* ================= PERFECT CARD ================= */
+function pick(nums){
+  let res=[];
+  while(res.length<5){
+    let n=nums[Math.floor(Math.random()*nums.length)];
+    if(!res.includes(n)) res.push(n);
   }
-  return [...set].sort((a,b)=>a-b);
+  return res;
 }
 
 function generateCard(){
-  const B=generateUnique(1,15);
-  const I=generateUnique(16,30);
-  const N=generateUnique(31,45);
-  const G=generateUnique(46,60);
-  const O=generateUnique(61,75);
+  const B = pick([...Array(15)].map((_,i)=>i+1));
+  const I = pick([...Array(15)].map((_,i)=>i+16));
+  const N = pick([...Array(15)].map((_,i)=>i+31));
+  const G = pick([...Array(15)].map((_,i)=>i+46));
+  const O = pick([...Array(15)].map((_,i)=>i+61));
 
   return [
     [B[0],I[0],N[0],G[0],O[0]],
     [B[1],I[1],N[1],G[1],O[1]],
     [B[2],I[2],"FREE",G[2],O[2]],
     [B[3],I[3],N[3],G[3],O[3]],
-    [B[4],I[4],N[4],G[4],O[4]],
+    [B[4],I[4],N[4],G[4],O[4]]
   ];
 }
 
-/* ================= JOIN (FIXED) ================= */
+/* ================= JOIN ================= */
 let players=[];
 
 app.post("/join", async(req,res)=>{
   const {phone}=req.body;
-
   const user=await User.findOne({phone});
 
   if(!user || user.status!=="approved"){
@@ -168,22 +172,34 @@ app.post("/join", async(req,res)=>{
   }
 
   user.balance -= 10;
-  user.cartela = generateCard(); // FIXED UNIQUE CARD
+  user.cartela = generateCard();
   await user.save();
 
   if(!players.includes(phone)) players.push(phone);
 
   io.emit("players",players);
 
-  res.json({ok:true,cartela:user.cartela,balance:user.balance});
+  res.json({
+    ok:true,
+    cartela:user.cartela,
+    balance:user.balance
+  });
 });
 
 /* ================= GAME ================= */
 let called=[];
 let interval;
+let pot=0;
 
 function startCountdown(){
-  let t=40;
+  if(players.length < 2){
+    io.emit("msg","Need at least 2 players");
+    return;
+  }
+
+  pot = players.length * 10;
+
+  let t=20;
   io.emit("countdown",t);
 
   let cd=setInterval(()=>{
@@ -216,11 +232,34 @@ function startGame(){
   },3000);
 }
 
+/* ================= WIN ================= */
+app.post("/win", async(req,res)=>{
+  const {phone}=req.body;
+
+  clearInterval(interval);
+
+  const winAmount = Math.floor(pot * 0.8);
+
+  await User.findOneAndUpdate(
+    {phone},
+    {$inc:{balance:winAmount}}
+  );
+
+  io.emit("winner", {phone, winAmount});
+
+  players=[];
+  called=[];
+  pot=0;
+
+  res.json({ok:true});
+});
+
+/* ================= SOCKET ================= */
 io.on("connection",(socket)=>{
   socket.on("start",startCountdown);
 });
 
 /* ================= SERVER ================= */
-server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FIXED FULL SYSTEM RUNNING");
+server.listen(process.env.PORT || 10000, ()=>{
+  console.log("🚀 ETHIOBINGO FULL SYSTEM READY");
 });
