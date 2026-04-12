@@ -3,40 +3,42 @@
 <body>
 
 <h2>ADMIN PANEL</h2>
-
 <button onclick="load()">Refresh</button>
 
 <div id="users"></div>
 
 <script>
 async function load(){
-  const res=await fetch("/admin/list");
-  const users=await res.json();
+  const res = await fetch("/admin/list");
+  const users = await res.json();
 
-  let html="";
+  let html = "";
 
   users.forEach(u=>{
-    html+=`
+    html += `
     <div style="border:1px solid black;padding:10px;margin:5px">
       ${u.phone} | ${u.status} | ${u.balance}
-      <br>
+      <br><br>
       <button onclick="approve('${u.phone}')">Approve</button>
       <button onclick="reject('${u.phone}')">Reject</button>
-    </div>`;
+    </div>
+    `;
   });
 
-  document.getElementById("users").innerHTML=html;
+  document.getElementById("users").innerHTML = html;
 }
 
 async function approve(phone){
-  await fetch("/admin/approve/"+phone,{method:"POST"});
+  await fetch("/admin/approve/" + phone, { method:"POST" });
   load();
 }
 
 async function reject(phone){
-  await fetch("/admin/reject/"+phone,{method:"POST"});
+  await fetch("/admin/reject/" + phone, { method:"POST" });
   load();
 }
+
+load();
 </script>
 
 </body>
