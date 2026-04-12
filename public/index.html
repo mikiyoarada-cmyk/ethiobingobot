@@ -1,167 +1,105 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <title>Bingo Final</title>
-
-  <style>
-    body {
-      font-family: Arial;
-      text-align: center;
-      background: #f2f2f2;
-    }
-
-    input, button {
-      padding: 10px;
-      margin: 5px;
-    }
-
-    table {
-      margin: auto;
-      border-collapse: collapse;
-      margin-top: 15px;
-    }
-
-    th, td {
-      border: 2px solid black;
-      width: 60px;
-      height: 60px;
-      text-align: center;
-      font-weight: bold;
-      font-size: 18px;
-    }
-
-    th {
-      background: gold;
-    }
-
-    .hit {
-      background: limegreen;
-      color: white;
-    }
-  </style>
-</head>
-
 <body>
 
-<h2>🎯 BINGO GAME</h2>
+<h2>BINGO</h2>
 
-<input id="phone" placeholder="Phone"/>
-<button onclick="register()">Start</button>
+<input id="phone" placeholder="Phone">
+<button onclick="startApp()">Start</button>
 
-<br>
+<h3>Balance: <span id="bal">0</span></h3>
 
-<input id="room" placeholder="Room ID"/>
-<button onclick="join()">Join Room</button>
+<button onclick="deposit()">Deposit 50</button>
+<button onclick="join()">Pick Cartela</button>
 <button onclick="startGame()">Start Game</button>
 
 <h3>⏳ Countdown: <span id="count">0</span></h3>
 
-<h3>📢 Called Numbers</h3>
+<h3>📢 Called</h3>
 <div id="called"></div>
+
+<h3>👥 Players</h3>
+<div id="players"></div>
 
 <h3>🏆 Winner</h3>
 <div id="winner"></div>
 
-<h3>🎮 Your Cartela</h3>
-
-<!-- 🔥 REAL BINGO TABLE -->
-<table id="card">
-  <thead>
-    <tr>
-      <th>B</th>
-      <th>I</th>
-      <th>N</th>
-      <th>G</th>
-      <th>O</th>
-    </tr>
-  </thead>
-  <tbody id="cardBody"></tbody>
-</table>
+<h3>🎯 Card</h3>
+<div id="card"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const socket = io();
+const socket=io();
 
-let phone = "";
-let room = "";
-let card = [];
-let called = [];
+let phone="";
+let card=[];
+let called=[];
 
-/* REGISTER */
-function register() {
-  phone = document.getElementById("phone").value;
+async function startApp(){
+  phone=document.getElementById("phone").value;
 
-  fetch("/register", {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ phone })
-  });
+  await fetch("/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})});
+
+  loadBalance();
 }
 
-/* JOIN ROOM */
-async function join() {
-  room = document.getElementById("room").value;
+async function loadBalance(){
+  const res=await fetch("/balance/"+phone);
+  const data=await res.json();
+  document.getElementById("bal").innerText=data.balance;
+}
 
-  const res = await fetch("/join", {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ phone, room })
-  });
+async function deposit(){
+  await fetch("/deposit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,amount:50})});
+  loadBalance();
+}
 
-  const data = await res.json();
+async function join(){
+  const res=await fetch("/join",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})});
+  const data=await res.json();
 
-  if (!data.ok) {
-    alert("❌ Not approved");
+  if(!data.ok){
+    alert(data.msg);
     return;
   }
 
-  card = data.cartela;
-  called = [];
-
-  socket.emit("joinRoom", room);
-
+  card=data.cartela;
   renderCard();
+  loadBalance();
 }
 
-/* RENDER CARD (ROW BY ROW) */
-function renderCard() {
-  let html = "";
+function renderCard(){
+  let html="<b>B I N G O</b><br>";
 
-  card.forEach(row => {
-    html += "<tr>";
-
-    row.forEach(n => {
-      let hit = called.includes(n) || n === "FREE";
-      html += `<td class="${hit ? "hit" : ""}">${n}</td>`;
-    });
-
-    html += "</tr>";
+  card.forEach(r=>{
+    html+=r.join(" | ")+"<br>";
   });
 
-  document.getElementById("cardBody").innerHTML = html;
+  document.getElementById("card").innerHTML=html;
 }
 
-/* START GAME */
-function startGame() {
-  socket.emit("start", room);
+function startGame(){
+  socket.emit("start");
 }
 
-/* SOCKET */
-socket.on("countdown", t => {
-  document.getElementById("count").innerText = t;
+socket.on("countdown",t=>{
+  document.getElementById("count").innerText=t;
 });
 
-socket.on("number", n => {
+socket.on("number",n=>{
   called.push(n);
-  renderCard();
 });
 
-socket.on("called", list => {
-  document.getElementById("called").innerText = list.join(", ");
+socket.on("called",list=>{
+  document.getElementById("called").innerText=list.join(", ");
 });
 
-socket.on("winner", w => {
-  document.getElementById("winner").innerText = "🏆 " + w;
+socket.on("players",p=>{
+  document.getElementById("players").innerText=p.join(", ");
+});
+
+socket.on("winner",w=>{
+  document.getElementById("winner").innerText="🏆 "+w;
 });
 </script>
 

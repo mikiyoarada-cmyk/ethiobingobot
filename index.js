@@ -5,7 +5,6 @@ const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const path = require("path");
-const TelegramBot = require("node-telegram-bot-api");
 
 const app = express();
 const server = http.createServer(app);
@@ -18,85 +17,65 @@ app.use(express.static("public"));
    DB
 ======================= */
 mongoose.connect(process.env.MONGODB_URI)
-  .then(()=>console.log("Mongo connected"))
+  .then(()=>console.log("MongoDB connected"))
   .catch(err=>console.log(err));
-
-/* =======================
-   TELEGRAM BOT
-======================= */
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: false });
-
-app.post(`/bot${process.env.BOT_TOKEN}`, (req,res)=>{
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
 
 /* =======================
    USER MODEL
 ======================= */
 const User = mongoose.model("User", new mongoose.Schema({
   phone:String,
-  status:{ type:String, default:"pending"},
-  txid:String,
-  cartela:Array,
-  room:String
+  balance:{type:Number,default:0},
+  status:{type:String,default:"pending"},
+  cartela:Array
 }));
 
 /* =======================
    REGISTER
 ======================= */
 app.post("/register", async(req,res)=>{
-  const {phone} = req.body;
-  await User.findOneAndUpdate({phone},{},{upsert:true});
+  const {phone}=req.body;
+  let user=await User.findOne({phone});
+  if(!user) user=await User.create({phone});
   res.json({ok:true});
 });
 
 /* =======================
-   PAYMENT (TXID)
+   DEPOSIT (TXID SIM)
 ======================= */
-app.post("/pay", async(req,res)=>{
-  const {phone,txid} = req.body;
+app.post("/deposit", async(req,res)=>{
+  const {phone,amount}=req.body;
 
-  await User.findOneAndUpdate({phone},{txid,status:"pending"});
-
-  // send to telegram admin
-  bot.sendMessage(process.env.ADMIN_ID,
-    `💰 Payment Request\nPhone: ${phone}\nTXID: ${txid}`,
-    {
-      reply_markup:{
-        inline_keyboard:[
-          [
-            {text:"✅ Approve",callback_data:`approve_${phone}`},
-            {text:"❌ Reject",callback_data:`reject_${phone}`}
-          ]
-        ]
-      }
-    }
+  await User.findOneAndUpdate(
+    {phone},
+    { $inc:{balance:Number(amount)} },
+    {upsert:true}
   );
 
   res.json({ok:true});
 });
 
 /* =======================
-   TELEGRAM APPROVE BUTTON
+   ADMIN APPROVE
 ======================= */
-bot.on("callback_query", async(q)=>{
-  const data = q.data;
-  const phone = data.split("_")[1];
-
-  if(data.startsWith("approve")){
-    await User.findOneAndUpdate({phone},{status:"approved"});
-    bot.sendMessage(q.message.chat.id,`✅ Approved: ${phone}`);
-  }
-
-  if(data.startsWith("reject")){
-    await User.findOneAndUpdate({phone},{status:"rejected"});
-    bot.sendMessage(q.message.chat.id,`❌ Rejected: ${phone}`);
-  }
+app.post("/admin/approve/:phone", async(req,res)=>{
+  await User.findOneAndUpdate(
+    {phone:req.params.phone},
+    {status:"approved"}
+  );
+  res.json({ok:true});
 });
 
 /* =======================
-   BINGO CARD (FIXED)
+   CHECK BALANCE
+======================= */
+app.get("/balance/:phone", async(req,res)=>{
+  const user=await User.findOne({phone:req.params.phone});
+  res.json({balance:user?user.balance:0});
+});
+
+/* =======================
+   BINGO CARD (REAL)
 ======================= */
 function unique(min,max){
   let arr=[];
@@ -121,34 +100,37 @@ function generateCard(){
   }
 
   card[2][2]="FREE";
+
   return card;
 }
 
 /* =======================
-   PRIVATE ROOMS
+   JOIN GAME
 ======================= */
-let rooms={};
+let players=[];
 
 app.post("/join", async(req,res)=>{
-  const {phone,room} = req.body;
+  const {phone}=req.body;
 
-  const user = await User.findOne({phone});
+  const user=await User.findOne({phone});
 
   if(!user || user.status!=="approved"){
-    return res.json({ok:false});
+    return res.json({ok:false,msg:"Not approved"});
   }
 
-  user.cartela = generateCard();
-  user.room = room;
+  if(user.balance<10){
+    return res.json({ok:false,msg:"Insufficient balance"});
+  }
+
+  user.balance-=10;
+  user.cartela=generateCard();
   await user.save();
 
-  if(!rooms[room]) rooms[room]=[];
+  if(!players.includes(phone)) players.push(phone);
 
-  if(!rooms[room].includes(phone)){
-    rooms[room].push(phone);
-  }
+  io.emit("players",players);
 
-  res.json({ok:true,cartela:user.cartela});
+  res.json({ok:true,cartela:user.cartela,balance:user.balance});
 });
 
 /* =======================
@@ -157,10 +139,49 @@ app.post("/join", async(req,res)=>{
 let called=[];
 let interval;
 
-function startGame(room){
+function checkWin(card){
+  const marks=card.map(r=>r.map(n=>n==="FREE"||called.includes(n)));
 
+  for(let r of marks) if(r.every(v=>v)) return true;
+
+  for(let c=0;c<5;c++)
+    if(marks.every(r=>r[c])) return true;
+
+  if(marks.every((r,i)=>r[i])) return true;
+  if(marks.every((r,i)=>r[4-i])) return true;
+
+  return false;
+}
+
+async function detectWinner(){
+  const users=await User.find({status:"approved"});
+
+  for(let u of users){
+    if(u.cartela && checkWin(u.cartela)){
+      return u.phone;
+    }
+  }
+  return null;
+}
+
+function startCountdown(){
+  let t=40;
+  io.emit("countdown",t);
+
+  let cd=setInterval(()=>{
+    t--;
+    io.emit("countdown",t);
+
+    if(t<=0){
+      clearInterval(cd);
+      startGame();
+    }
+  },1000);
+}
+
+function startGame(){
   called=[];
-  io.to(room).emit("start");
+  io.emit("start");
 
   interval=setInterval(async()=>{
 
@@ -171,32 +192,25 @@ function startGame(room){
 
     called.push(num);
 
-    io.to(room).emit("number",num);
-    io.to(room).emit("called",called);
+    io.emit("number",num);
+    io.emit("called",called);
+
+    const winner=await detectWinner();
+
+    if(winner){
+      io.emit("winner",winner);
+      io.emit("gameEnd","🎉 GOOD BINGO");
+
+      clearInterval(interval);
+
+      setTimeout(startCountdown,40000);
+    }
 
   },3000);
 }
 
 io.on("connection",(socket)=>{
-
-  socket.on("joinRoom",(room)=>{
-    socket.join(room);
-  });
-
-  socket.on("start",(room)=>{
-    let t=40;
-
-    let cd=setInterval(()=>{
-      socket.to(room).emit("countdown",t);
-      t--;
-
-      if(t<=0){
-        clearInterval(cd);
-        startGame(room);
-      }
-    },1000);
-  });
-
+  socket.on("start",startCountdown);
 });
 
 /* =======================
@@ -210,5 +224,5 @@ app.get("/admin",(req,res)=>{
    SERVER
 ======================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL PRO SYSTEM RUNNING");
+  console.log("🚀 ULTIMATE BINGO RUNNING");
 });
