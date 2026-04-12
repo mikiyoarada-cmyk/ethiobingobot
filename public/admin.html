@@ -4,20 +4,20 @@
 
 <h2>ADMIN PANEL</h2>
 
-<button onclick="load()">Refresh Users</button>
+<button onclick="load()">Refresh</button>
 
 <div id="users"></div>
 
 <script>
 async function load(){
-  const res = await fetch("/admin/list");
-  const users = await res.json();
+  const res=await fetch("/admin/list");
+  const users=await res.json();
 
   let html="";
 
   users.forEach(u=>{
     html+=`
-    <div style="border:1px solid black;margin:5px;padding:5px">
+    <div style="border:1px solid black;padding:10px;margin:5px">
       ${u.phone} | ${u.status} | ${u.balance}
       <br>
       <button onclick="approve('${u.phone}')">Approve</button>
