@@ -1,109 +1,96 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Bingo Game</title>
-  <style>
-    body { font-family: Arial; text-align: center; }
-    .grid { display: grid; grid-template-columns: repeat(5,60px); gap:5px; justify-content:center; }
-    .cell { border:1px solid black; padding:10px; }
-    .marked { background: yellow; }
-  </style>
+<title>Bingo</title>
+<style>
+.grid{display:grid;grid-template-columns:repeat(5,60px);gap:5px}
+.cell{border:1px solid black;padding:10px;text-align:center}
+.mark{background:yellow}
+</style>
 </head>
 
 <body>
 
 <h1>B I N G O</h1>
 
-<input id="phone" placeholder="Enter phone">
-<button onclick="join()">Join Game (10 ETB)</button>
+<input id="phone" placeholder="phone">
+<button onclick="join()">Join</button>
 
 <h3 id="balance"></h3>
-
-<h2 id="countdown"></h2>
+<h2 id="count"></h2>
 
 <div class="grid" id="card"></div>
 
-<h3>Called Numbers:</h3>
-<div id="called"></div>
-
+<h3 id="called"></h3>
 <h2 id="winner"></h2>
 
 <script src="/socket.io/socket.io.js"></script>
-
 <script>
-const socket = io();
-let card = [];
+const socket=io();
+let card=[];
 
-/* JOIN GAME */
 async function join(){
-  const phone = document.getElementById("phone").value;
+  const phone=document.getElementById("phone").value;
 
-  const res = await fetch("/join",{
+  const res=await fetch("/join",{
     method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify({ phone })
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({phone})
   });
 
-  const data = await res.json();
+  const data=await res.json();
 
   if(!data.ok){
     alert(data.msg);
     return;
   }
 
-  card = data.cartela;
-  document.getElementById("balance").innerText = "Balance: "+data.balance;
+  card=data.cartela;
+  document.getElementById("balance").innerText="Balance "+data.balance;
 
-  drawCard();
+  draw();
 }
 
-/* DRAW CARD */
-function drawCard(){
-  const grid = document.getElementById("card");
-  grid.innerHTML = "";
+function draw(){
+  const grid=document.getElementById("card");
+  grid.innerHTML="";
 
-  card.forEach(row=>{
-    row.forEach(cell=>{
-      const div = document.createElement("div");
-      div.className = "cell";
-      div.innerText = cell;
-      grid.appendChild(div);
+  card.forEach(r=>{
+    r.forEach(c=>{
+      const d=document.createElement("div");
+      d.className="cell";
+      d.innerText=c;
+      grid.appendChild(d);
     });
   });
 }
 
-/* MARK NUMBERS */
-function mark(num){
+function mark(n){
   document.querySelectorAll(".cell").forEach(c=>{
-    if(c.innerText == num){
-      c.classList.add("marked");
-    }
+    if(c.innerText==n) c.classList.add("mark");
   });
 }
 
-/* SOCKET EVENTS */
-socket.on("countdown", t=>{
-  document.getElementById("countdown").innerText = "Starting in: "+t;
+socket.on("countdown",t=>{
+  document.getElementById("count").innerText="Start in "+t;
 });
 
-socket.on("number", n=>{
+socket.on("number",n=>{
   mark(n);
 });
 
-socket.on("called", arr=>{
-  document.getElementById("called").innerText = arr.join(", ");
+socket.on("called",arr=>{
+  document.getElementById("called").innerText=arr.join(",");
 });
 
-socket.on("winner", w=>{
-  document.getElementById("winner").innerText =
-    "🏆 WINNER: "+w.phone+" ("+w.winner+" ETB)";
+socket.on("winner",w=>{
+  document.getElementById("winner").innerText="WINNER "+w.phone;
 });
 
-socket.on("message", m=>{
+socket.on("message",m=>{
   alert(m);
 });
 
-/* AUTO START */
 socket.emit("start");
 </script>
 
