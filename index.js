@@ -14,7 +14,7 @@ const io = new Server(server);
 app.use(express.json());
 app.use(express.static("public"));
 
-/* ================= DB ================= */
+/* ================= DATABASE ================= */
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
   .catch(err => console.log(err));
@@ -22,12 +22,18 @@ mongoose.connect(process.env.MONGODB_URI)
 /* ================= BOT ================= */
 const bot = new TelegramBot(process.env.BOT_TOKEN);
 
+/* WEBHOOK */
 app.post("/bot", (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-/* ================= USER ================= */
+/* ================= SAFETY ================= */
+process.on("unhandledRejection", (e) => {
+  console.log("ERROR:", e.message);
+});
+
+/* ================= USER MODEL ================= */
 const User = mongoose.model("User", new mongoose.Schema({
   phone: { type: String, unique: true },
   status: { type: String, default: "pending" },
@@ -66,7 +72,7 @@ TXID: ${txid}`,
   res.json({ ok: true });
 });
 
-/* ================= CALLBACK SAFE ================= */
+/* ================= CALLBACK FIX ================= */
 bot.on("callback_query", async (q) => {
   try {
     const [action, phone] = (q.data || "").split(":");
@@ -87,24 +93,23 @@ bot.on("callback_query", async (q) => {
       );
     }
 
-  } catch (e) {
-    console.log("callback error");
+  } catch (err) {
+    console.log("callback safe error");
   }
 });
 
-/* ================= ANTI CHEAT ================= */
+/* ================= GAME SYSTEM ================= */
 let players = [];
 let playerCards = {};
 let called = [];
-let gameRunning = false;
 
 /* ================= CARTELA ================= */
 function unique(min, max) {
-  const s = new Set();
-  while (s.size < 5) {
-    s.add(Math.floor(Math.random() * (max - min + 1)) + min);
+  const set = new Set();
+  while (set.size < 5) {
+    set.add(Math.floor(Math.random() * (max - min + 1)) + min);
   }
-  return [...s];
+  return [...set];
 }
 
 function generateCard() {
@@ -127,21 +132,18 @@ function generateCard() {
 function isWinner(card, called) {
   const hit = (n) => n === "FREE" || called.includes(n);
 
-  // ROW
   for (let r = 0; r < 5; r++) {
     if (card[r].every(hit)) return true;
   }
 
-  // COLUMN
   for (let c = 0; c < 5; c++) {
     if ([0,1,2,3,4].every(r => hit(card[r][c]))) return true;
   }
 
-  // FULL
   return card.flat().every(hit);
 }
 
-/* ================= JOIN GAME ================= */
+/* ================= JOIN ================= */
 app.post("/join", async (req, res) => {
   const { phone } = req.body;
 
@@ -167,18 +169,12 @@ app.post("/join", async (req, res) => {
 
   io.emit("players", players);
 
-  res.json({
-    ok: true,
-    cartela: user.cartela,
-    balance: user.balance
-  });
+  res.json({ ok: true, cartela: user.cartela, balance: user.balance });
 });
 
 /* ================= GAME LOOP ================= */
 function startGame() {
   called = [];
-  gameRunning = true;
-
   io.emit("start");
 
   const interval = setInterval(async () => {
@@ -193,7 +189,6 @@ function startGame() {
     io.emit("number", num);
     io.emit("called", called);
 
-    // CHECK WINNER
     for (let phone of players) {
       const user = await User.findOne({ phone });
       if (!user || !user.cartela) continue;
@@ -201,29 +196,22 @@ function startGame() {
       if (isWinner(user.cartela, called)) {
 
         clearInterval(interval);
-        gameRunning = false;
 
-        const totalPool = players.length * 10;
-        const winnerAmount = Math.floor(totalPool * 0.8);
-        const adminAmount = Math.floor(totalPool * 0.2);
+        const total = players.length * 10;
+        const winner = Math.floor(total * 0.8);
+        const admin = Math.floor(total * 0.2);
 
         await User.findOneAndUpdate(
           { phone },
-          { $inc: { balance: winnerAmount } }
+          { $inc: { balance: winner } }
         );
 
-        io.emit("winner", {
-          phone,
-          winnerAmount,
-          adminAmount
-        });
+        io.emit("winner", { phone, winner, admin });
 
         io.emit("message", "🎉 GOOD BINGO!");
 
-        console.log("WINNER:", phone);
-
         setTimeout(() => {
-          startGame(); // AUTO RESTART GAME
+          startGame();
         }, 5000);
 
         return;
@@ -256,5 +244,5 @@ io.on("connection", (socket) => {
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT || 10000, () => {
-  console.log("🚀 FULL BINGO RESTORED SYSTEM RUNNING");
+  console.log("🚀 FULL BINGO PRO SYSTEM RUNNING");
 });
