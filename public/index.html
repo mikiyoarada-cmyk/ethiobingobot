@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Bingo Pro</title>
+  <title>Bingo Final</title>
 
   <style>
     body {
@@ -10,49 +10,33 @@
       background: #f2f2f2;
     }
 
-    h2 {
-      margin-top: 10px;
-    }
-
     input, button {
       padding: 10px;
       margin: 5px;
-      font-size: 16px;
     }
 
-    .card {
-      display: grid;
-      grid-template-columns: repeat(5, 60px);
-      gap: 5px;
-      justify-content: center;
+    table {
+      margin: auto;
+      border-collapse: collapse;
       margin-top: 15px;
     }
 
-    .cell {
-      background: white;
+    th, td {
       border: 2px solid black;
-      padding: 12px;
+      width: 60px;
+      height: 60px;
+      text-align: center;
       font-weight: bold;
+      font-size: 18px;
+    }
+
+    th {
+      background: gold;
     }
 
     .hit {
       background: limegreen;
       color: white;
-    }
-
-    .header {
-      display: grid;
-      grid-template-columns: repeat(5, 60px);
-      gap: 5px;
-      justify-content: center;
-      font-weight: bold;
-      font-size: 20px;
-      margin-top: 20px;
-    }
-
-    .box {
-      background: gold;
-      padding: 10px;
     }
   </style>
 </head>
@@ -61,12 +45,12 @@
 
 <h2>🎯 BINGO GAME</h2>
 
-<input id="phone" placeholder="Enter phone"/>
+<input id="phone" placeholder="Phone"/>
 <button onclick="register()">Start</button>
 
 <br>
 
-<input id="room" placeholder="Room (e.g 1)"/>
+<input id="room" placeholder="Room ID"/>
 <button onclick="join()">Join Room</button>
 <button onclick="startGame()">Start Game</button>
 
@@ -78,18 +62,21 @@
 <h3>🏆 Winner</h3>
 <div id="winner"></div>
 
-<h3>🎮 Your Card</h3>
+<h3>🎮 Your Cartela</h3>
 
-<!-- BINGO HEADER -->
-<div class="header">
-  <div class="box">B</div>
-  <div class="box">I</div>
-  <div class="box">N</div>
-  <div class="box">G</div>
-  <div class="box">O</div>
-</div>
-
-<div id="card" class="card"></div>
+<!-- 🔥 REAL BINGO TABLE -->
+<table id="card">
+  <thead>
+    <tr>
+      <th>B</th>
+      <th>I</th>
+      <th>N</th>
+      <th>G</th>
+      <th>O</th>
+    </tr>
+  </thead>
+  <tbody id="cardBody"></tbody>
+</table>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
@@ -136,18 +123,22 @@ async function join() {
   renderCard();
 }
 
-/* RENDER CARD */
+/* RENDER CARD (ROW BY ROW) */
 function renderCard() {
   let html = "";
 
-  card.flat().forEach(n => {
+  card.forEach(row => {
+    html += "<tr>";
 
-    let isHit = called.includes(n) || n === "FREE";
+    row.forEach(n => {
+      let hit = called.includes(n) || n === "FREE";
+      html += `<td class="${hit ? "hit" : ""}">${n}</td>`;
+    });
 
-    html += `<div class="cell ${isHit ? "hit" : ""}">${n}</div>`;
+    html += "</tr>";
   });
 
-  document.getElementById("card").innerHTML = html;
+  document.getElementById("cardBody").innerHTML = html;
 }
 
 /* START GAME */
@@ -155,7 +146,7 @@ function startGame() {
   socket.emit("start", room);
 }
 
-/* SOCKET EVENTS */
+/* SOCKET */
 socket.on("countdown", t => {
   document.getElementById("count").innerText = t;
 });
