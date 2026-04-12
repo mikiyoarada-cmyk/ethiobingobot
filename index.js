@@ -1,175 +1,226 @@
 require("dotenv").config();
+
 const express = require("express");
 const http = require("http");
-const mongoose = require("mongoose");
 const { Server } = require("socket.io");
+const mongoose = require("mongoose");
+const path = require("path");
 const TelegramBot = require("node-telegram-bot-api");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+const io = new Server(server);
 
 app.use(express.json());
+app.use(express.static("public"));
 
-// ================= DB =================
-mongoose.connect(process.env.MONGO_URL)
-  .then(() => console.log("MongoDB connected"))
-  .catch(err => console.log(err));
+/* ================= DB ================= */
+mongoose.connect(process.env.MONGODB_URI)
+.then(()=>console.log("MongoDB connected"))
+.catch(err=>console.log(err));
 
-// ================= MODELS =================
-const userSchema = new mongoose.Schema({
-  telegramId: { type: String, unique: true },
-  balance: { type: Number, default: 0 }
+/* ================= BOT (IMPORTANT FIX WEBHOOK) ================= */
+const bot = new TelegramBot(process.env.BOT_TOKEN);
+
+app.post("/bot", (req,res)=>{
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
 });
 
-const cartelaSchema = new mongoose.Schema({
-  number: { type: Number, unique: true },
-  owner: String,
-  paid: { type: Boolean, default: false }
+/* ================= USER ================= */
+const User = mongoose.model("User", new mongoose.Schema({
+  phone:String,
+  status:{type:String,default:"pending"},
+  balance:{type:Number,default:0},
+  cartela:Array,
+  txid:String
+}));
+
+/* ================= ADMIN ROUTES ================= */
+app.get("/admin", (req,res)=>{
+  res.sendFile(path.join(__dirname,"public/admin.html"));
 });
 
-const gameSchema = new mongoose.Schema({
-  calledNumbers: [Number]
+app.get("/admin/list", async(req,res)=>{
+  const users = await User.find();
+  res.json(users);
 });
 
-const User = mongoose.model("User", userSchema);
-const Cartela = mongoose.model("Cartela", cartelaSchema);
-const Game = mongoose.model("Game", gameSchema);
+app.post("/admin/approve/:phone", async(req,res)=>{
+  await User.findOneAndUpdate(
+    {phone:req.params.phone},
+    {status:"approved",balance:100}
+  );
+  res.json({ok:true});
+});
 
-// ================= TELEGRAM BOT =================
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
-const ADMIN = process.env.ADMIN_CHAT_ID;
+app.post("/admin/reject/:phone", async(req,res)=>{
+  await User.findOneAndUpdate(
+    {phone:req.params.phone},
+    {status:"rejected"}
+  );
+  res.json({ok:true});
+});
 
-// ================= INIT GAME =================
-let game;
-async function initGame() {
-  game = await Game.findOne();
-  if (!game) game = await Game.create({ calledNumbers: [] });
+/* ================= REGISTER ================= */
+app.post("/register", async(req,res)=>{
+  const {phone}=req.body;
+  await User.findOneAndUpdate({phone},{},{upsert:true});
+  res.json({ok:true});
+});
+
+/* ================= PAYMENT ================= */
+app.post("/pay", async(req,res)=>{
+  const {phone,txid}=req.body;
+
+  await User.findOneAndUpdate(
+    {phone},
+    {txid,status:"pending"},
+    {upsert:true}
+  );
+
+  bot.sendMessage(process.env.ADMIN_ID,
+`💰 PAYMENT REQUEST
+Phone: ${phone}
+TXID: ${txid}`,
+{
+reply_markup:{
+inline_keyboard:[[
+{text:"✅ Approve",callback_data:`approve:${phone}`},
+{text:"❌ Reject",callback_data:`reject:${phone}`}
+]]
 }
-initGame();
-
-// ================= GENERATE 600 CARTELAS (NO DUPLICATES) =================
-async function generateCartelas() {
-  const count = await Cartela.countDocuments();
-  if (count > 0) return;
-
-  let used = new Set();
-
-  let bulk = [];
-  for (let i = 1; i <= 600; i++) {
-    let num;
-    do {
-      num = Math.floor(Math.random() * 100000);
-    } while (used.has(num));
-
-    used.add(num);
-
-    bulk.push({
-      number: num,
-      owner: null,
-      paid: false
-    });
-  }
-
-  await Cartela.insertMany(bulk);
-  console.log("600 cartelas created");
-}
-generateCartelas();
-
-// ================= SOCKET =================
-io.on("connection", (socket) => {
-  socket.emit("gameUpdate", game);
 });
 
-// ================= TELEGRAM COMMANDS =================
-
-// request cartela
-bot.onText(/\/buy/, async (msg) => {
-  const chatId = msg.chat.id;
-
-  const free = await Cartela.findOne({ owner: null });
-
-  if (!free) return bot.sendMessage(chatId, "No cartelas available");
-
-  bot.sendMessage(ADMIN, `APPROVE CARTELA REQUEST
-User: ${chatId}
-Cartela: ${free.number}`, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "APPROVE", callback_data: `approve_${chatId}_${free.number}` }],
-        [{ text: "REJECT", callback_data: `reject_${chatId}_${free.number}` }]
-      ]
-    }
-  });
-
-  bot.sendMessage(chatId, "Request sent for approval");
+  res.json({ok:true});
 });
 
-// approve/reject
-bot.on("callback_query", async (q) => {
+/* ================= BOT BUTTON FIX (IMPORTANT) ================= */
+bot.on("callback_query", async(q)=>{
   const data = q.data;
 
-  if (data.startsWith("approve")) {
-    const [, userId, number] = data.split("_");
+  const [action, phone] = data.split(":");
 
-    await Cartela.updateOne(
-      { number: Number(number) },
-      { owner: userId, paid: true }
+  if(action === "approve"){
+    await User.findOneAndUpdate(
+      {phone},
+      {status:"approved",balance:100}
     );
-
-    await User.updateOne(
-      { telegramId: userId },
-      { $inc: { balance: -10 } },
-      { upsert: true }
-    );
-
-    bot.sendMessage(userId, `Approved ✔ Your cartela: ${number}`);
-    bot.sendMessage(ADMIN, "Approved successfully");
-
+    bot.answerCallbackQuery(q.id,"Approved ✅");
+    bot.sendMessage(q.message.chat.id,"✅ Approved " + phone);
   }
 
-  if (data.startsWith("reject")) {
-    const [, userId] = data.split("_");
-    bot.sendMessage(userId, "Request rejected ❌");
-    bot.sendMessage(ADMIN, "Rejected");
+  if(action === "reject"){
+    await User.findOneAndUpdate(
+      {phone},
+      {status:"rejected"}
+    );
+    bot.answerCallbackQuery(q.id,"Rejected ❌");
+    bot.sendMessage(q.message.chat.id,"❌ Rejected " + phone);
   }
-
-  bot.answerCallbackQuery(q.id);
 });
 
-// ================= CALL NUMBER =================
-app.post("/call", async (req, res) => {
-  const { number } = req.body;
-
-  if (!game.calledNumbers.includes(number)) {
-    game.calledNumbers.push(number);
-    await game.save();
-  }
-
-  io.emit("gameUpdate", game);
-
-  res.json(game);
+/* ================= BALANCE ================= */
+app.get("/balance/:phone", async(req,res)=>{
+  const user=await User.findOne({phone:req.params.phone});
+  res.json({balance:user?user.balance:0});
 });
 
-// ================= CHECK WINNER =================
-app.get("/check/:userId", async (req, res) => {
-  const cards = await Cartela.find({ owner: req.params.userId, paid: true });
+/* ================= FIXED BINGO CARD (NO DUPLICATES) ================= */
+function generateUnique(min,max){
+  let set=new Set();
+  while(set.size<5){
+    set.add(Math.floor(Math.random()*(max-min+1))+min);
+  }
+  return [...set].sort((a,b)=>a-b);
+}
 
-  const called = game.calledNumbers;
+function generateCard(){
+  const B=generateUnique(1,15);
+  const I=generateUnique(16,30);
+  const N=generateUnique(31,45);
+  const G=generateUnique(46,60);
+  const O=generateUnique(61,75);
 
-  let winner = null;
+  return [
+    [B[0],I[0],N[0],G[0],O[0]],
+    [B[1],I[1],N[1],G[1],O[1]],
+    [B[2],I[2],"FREE",G[2],O[2]],
+    [B[3],I[3],N[3],G[3],O[3]],
+    [B[4],I[4],N[4],G[4],O[4]],
+  ];
+}
 
-  for (let c of cards) {
-    if (called.includes(c.number)) {
-      winner = c.number;
-      break;
+/* ================= JOIN (FIXED) ================= */
+let players=[];
+
+app.post("/join", async(req,res)=>{
+  const {phone}=req.body;
+
+  const user=await User.findOne({phone});
+
+  if(!user || user.status!=="approved"){
+    return res.json({ok:false,msg:"Not approved"});
+  }
+
+  if(user.balance < 10){
+    return res.json({ok:false,msg:"Insufficient balance"});
+  }
+
+  user.balance -= 10;
+  user.cartela = generateCard(); // FIXED UNIQUE CARD
+  await user.save();
+
+  if(!players.includes(phone)) players.push(phone);
+
+  io.emit("players",players);
+
+  res.json({ok:true,cartela:user.cartela,balance:user.balance});
+});
+
+/* ================= GAME ================= */
+let called=[];
+let interval;
+
+function startCountdown(){
+  let t=40;
+  io.emit("countdown",t);
+
+  let cd=setInterval(()=>{
+    t--;
+    io.emit("countdown",t);
+
+    if(t<=0){
+      clearInterval(cd);
+      startGame();
     }
-  }
+  },1000);
+}
 
-  res.json({ winner });
+function startGame(){
+  called=[];
+  io.emit("start");
+
+  interval=setInterval(()=>{
+    let num;
+
+    do{
+      num=Math.floor(Math.random()*75)+1;
+    }while(called.includes(num));
+
+    called.push(num);
+
+    io.emit("number",num);
+    io.emit("called",called);
+
+  },3000);
+}
+
+io.on("connection",(socket)=>{
+  socket.on("start",startCountdown);
 });
 
-// ================= SERVER =================
-server.listen(process.env.PORT, () => {
-  console.log("Running on", process.env.PORT);
+/* ================= SERVER ================= */
+server.listen(process.env.PORT||10000,()=>{
+  console.log("🚀 FIXED FULL SYSTEM RUNNING");
 });
