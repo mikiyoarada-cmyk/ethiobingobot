@@ -5,6 +5,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const path = require("path");
+const TelegramBot = require("node-telegram-bot-api");
 
 const app = express();
 const server = http.createServer(app);
@@ -17,226 +18,197 @@ app.use(express.static("public"));
    DB
 ======================= */
 mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log("MongoDB connected"))
-  .catch(err => console.log(err));
+  .then(()=>console.log("Mongo connected"))
+  .catch(err=>console.log(err));
+
+/* =======================
+   TELEGRAM BOT
+======================= */
+const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: false });
+
+app.post(`/bot${process.env.BOT_TOKEN}`, (req,res)=>{
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
 
 /* =======================
    USER MODEL
 ======================= */
-const userSchema = new mongoose.Schema({
-  phone: String,
-  cartela: Array,
-  status: { type: String, default: "pending" },
-  balance: { type: Number, default: 0 }
-});
-
-const User = mongoose.model("User", userSchema);
-
-/* =======================
-   TELEGRAM WEBHOOK
-======================= */
-app.post(`/bot${process.env.BOT_TOKEN}`, (req, res) => {
-  console.log("Telegram:", req.body);
-  res.json({ ok: true });
-});
+const User = mongoose.model("User", new mongoose.Schema({
+  phone:String,
+  status:{ type:String, default:"pending"},
+  txid:String,
+  cartela:Array,
+  room:String
+}));
 
 /* =======================
    REGISTER
 ======================= */
-app.post("/register", async (req, res) => {
-  const { phone } = req.body;
-
-  let user = await User.findOne({ phone });
-
-  if (!user) user = await User.create({ phone });
-
-  res.json({ ok: true });
+app.post("/register", async(req,res)=>{
+  const {phone} = req.body;
+  await User.findOneAndUpdate({phone},{},{upsert:true});
+  res.json({ok:true});
 });
 
 /* =======================
-   TXID
+   PAYMENT (TXID)
 ======================= */
-app.post("/pay", async (req, res) => {
-  const { phone } = req.body;
+app.post("/pay", async(req,res)=>{
+  const {phone,txid} = req.body;
 
-  await User.findOneAndUpdate(
-    { phone },
-    { status: "pending" },
-    { upsert: true }
+  await User.findOneAndUpdate({phone},{txid,status:"pending"});
+
+  // send to telegram admin
+  bot.sendMessage(process.env.ADMIN_ID,
+    `💰 Payment Request\nPhone: ${phone}\nTXID: ${txid}`,
+    {
+      reply_markup:{
+        inline_keyboard:[
+          [
+            {text:"✅ Approve",callback_data:`approve_${phone}`},
+            {text:"❌ Reject",callback_data:`reject_${phone}`}
+          ]
+        ]
+      }
+    }
   );
 
-  res.json({ ok: true });
+  res.json({ok:true});
 });
 
 /* =======================
-   ADMIN LIST USERS
+   TELEGRAM APPROVE BUTTON
 ======================= */
-app.get("/admin/list", async (req, res) => {
-  const users = await User.find();
-  res.json(users);
+bot.on("callback_query", async(q)=>{
+  const data = q.data;
+  const phone = data.split("_")[1];
+
+  if(data.startsWith("approve")){
+    await User.findOneAndUpdate({phone},{status:"approved"});
+    bot.sendMessage(q.message.chat.id,`✅ Approved: ${phone}`);
+  }
+
+  if(data.startsWith("reject")){
+    await User.findOneAndUpdate({phone},{status:"rejected"});
+    bot.sendMessage(q.message.chat.id,`❌ Rejected: ${phone}`);
+  }
 });
 
 /* =======================
-   ADMIN APPROVE
+   BINGO CARD (FIXED)
 ======================= */
-app.post("/admin/approve/:phone", async (req, res) => {
-  await User.findOneAndUpdate(
-    { phone: req.params.phone },
-    { status: "approved", balance: 100 }
-  );
-  res.json({ ok: true });
-});
-
-/* =======================
-   CARTELA
-======================= */
-function rand(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function unique(min, max) {
-  let arr = [];
-  while (arr.length < 5) {
-    let n = rand(min, max);
-    if (!arr.includes(n)) arr.push(n);
+function unique(min,max){
+  let arr=[];
+  while(arr.length<5){
+    let n=Math.floor(Math.random()*(max-min+1))+min;
+    if(!arr.includes(n)) arr.push(n);
   }
   return arr;
 }
 
-function generateCard() {
-  const B = unique(1,15);
-  const I = unique(16,30);
-  const N = unique(31,45);
-  const G = unique(46,60);
-  const O = unique(61,75);
+function generateCard(){
+  const B=unique(1,15);
+  const I=unique(16,30);
+  const N=unique(31,45);
+  const G=unique(46,60);
+  const O=unique(61,75);
 
-  let card = [];
+  let card=[];
 
-  for (let i = 0; i < 5; i++) {
-    card.push([B[i], I[i], N[i], G[i], O[i]]);
+  for(let i=0;i<5;i++){
+    card.push([B[i],I[i],N[i],G[i],O[i]]);
   }
 
-  card[2][2] = "FREE";
-
+  card[2][2]="FREE";
   return card;
 }
 
 /* =======================
-   JOIN GAME
+   PRIVATE ROOMS
 ======================= */
-let players = [];
+let rooms={};
 
-app.post("/join", async (req, res) => {
-  const { phone } = req.body;
+app.post("/join", async(req,res)=>{
+  const {phone,room} = req.body;
 
-  const user = await User.findOne({ phone });
+  const user = await User.findOne({phone});
 
-  if (!user || user.status !== "approved") {
-    return res.json({ ok: false });
+  if(!user || user.status!=="approved"){
+    return res.json({ok:false});
   }
 
   user.cartela = generateCard();
+  user.room = room;
   await user.save();
 
-  if (!players.includes(phone)) players.push(phone);
+  if(!rooms[room]) rooms[room]=[];
 
-  io.emit("players", players);
+  if(!rooms[room].includes(phone)){
+    rooms[room].push(phone);
+  }
 
-  res.json({ ok: true, cartela: user.cartela });
+  res.json({ok:true,cartela:user.cartela});
 });
 
 /* =======================
    GAME ENGINE
 ======================= */
-let called = [];
+let called=[];
 let interval;
 
-function checkWin(card) {
-  const marks = card.map(r =>
-    r.map(n => n === "FREE" || called.includes(n))
-  );
+function startGame(room){
 
-  for (let r of marks) if (r.every(v => v)) return true;
+  called=[];
+  io.to(room).emit("start");
 
-  for (let c = 0; c < 5; c++)
-    if (marks.every(r => r[c])) return true;
-
-  if (marks.every((r,i)=>r[i])) return true;
-  if (marks.every((r,i)=>r[4-i])) return true;
-
-  return false;
-}
-
-async function detectWinner() {
-  const users = await User.find({ status: "approved" });
-
-  for (let u of users) {
-    if (u.cartela && checkWin(u.cartela)) {
-      return u.phone;
-    }
-  }
-  return null;
-}
-
-function startCountdown() {
-  let t = 40;
-  io.emit("countdown", t);
-
-  let cd = setInterval(() => {
-    t--;
-    io.emit("countdown", t);
-
-    if (t <= 0) {
-      clearInterval(cd);
-      startGame();
-    }
-  }, 1000);
-}
-
-function startGame() {
-  called = [];
-  io.emit("start");
-
-  interval = setInterval(async () => {
+  interval=setInterval(async()=>{
 
     let num;
-    do {
-      num = rand(1,75);
-    } while (called.includes(num));
+    do{
+      num=Math.floor(Math.random()*75)+1;
+    }while(called.includes(num));
 
     called.push(num);
 
-    io.emit("number", num);
-    io.emit("calledList", called);
+    io.to(room).emit("number",num);
+    io.to(room).emit("called",called);
 
-    const winner = await detectWinner();
-
-    if (winner) {
-      io.emit("winner", winner);
-      io.emit("gameEnd", "🎉 GOOD BINGO");
-
-      clearInterval(interval);
-
-      setTimeout(startCountdown, 40000);
-    }
-
-  }, 4000);
+  },3000);
 }
 
-io.on("connection", (socket) => {
-  socket.on("start", startCountdown);
+io.on("connection",(socket)=>{
+
+  socket.on("joinRoom",(room)=>{
+    socket.join(room);
+  });
+
+  socket.on("start",(room)=>{
+    let t=40;
+
+    let cd=setInterval(()=>{
+      socket.to(room).emit("countdown",t);
+      t--;
+
+      if(t<=0){
+        clearInterval(cd);
+        startGame(room);
+      }
+    },1000);
+  });
+
 });
 
 /* =======================
-   ADMIN PAGE FIX
+   ADMIN PAGE
 ======================= */
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/admin.html"));
+app.get("/admin",(req,res)=>{
+  res.sendFile(path.join(__dirname,"public/admin.html"));
 });
 
 /* =======================
    SERVER
 ======================= */
-server.listen(process.env.PORT || 10000, () => {
-  console.log("🚀 ADMIN PRO SYSTEM RUNNING");
+server.listen(process.env.PORT||10000,()=>{
+  console.log("🚀 FINAL PRO SYSTEM RUNNING");
 });

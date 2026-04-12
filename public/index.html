@@ -2,60 +2,105 @@
 <html>
 <head>
   <title>Bingo Pro</title>
-  <style>
-    body { font-family: Arial; text-align:center; }
 
-    .grid {
-      display:grid;
+  <style>
+    body {
+      font-family: Arial;
+      text-align: center;
+      background: #f2f2f2;
+    }
+
+    h2 {
+      margin-top: 10px;
+    }
+
+    input, button {
+      padding: 10px;
+      margin: 5px;
+      font-size: 16px;
+    }
+
+    .card {
+      display: grid;
       grid-template-columns: repeat(5, 60px);
-      gap:5px;
-      justify-content:center;
-      margin-top:10px;
+      gap: 5px;
+      justify-content: center;
+      margin-top: 15px;
     }
 
     .cell {
-      border:1px solid #000;
-      padding:10px;
+      background: white;
+      border: 2px solid black;
+      padding: 12px;
+      font-weight: bold;
     }
 
     .hit {
       background: limegreen;
       color: white;
-      font-weight:bold;
+    }
+
+    .header {
+      display: grid;
+      grid-template-columns: repeat(5, 60px);
+      gap: 5px;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 20px;
+      margin-top: 20px;
+    }
+
+    .box {
+      background: gold;
+      padding: 10px;
     }
   </style>
 </head>
+
 <body>
 
-<h2>🎯 BINGO PRO</h2>
+<h2>🎯 BINGO GAME</h2>
 
-<input id="phone" placeholder="Phone"/>
+<input id="phone" placeholder="Enter phone"/>
 <button onclick="register()">Start</button>
-<button onclick="join()">Join Game</button>
-<button onclick="start()">Start Game</button>
+
+<br>
+
+<input id="room" placeholder="Room (e.g 1)"/>
+<button onclick="join()">Join Room</button>
+<button onclick="startGame()">Start Game</button>
 
 <h3>⏳ Countdown: <span id="count">0</span></h3>
 
 <h3>📢 Called Numbers</h3>
 <div id="called"></div>
 
-<h3>👥 Players</h3>
-<div id="players"></div>
-
 <h3>🏆 Winner</h3>
 <div id="winner"></div>
 
-<h3>🎮 Your Cartela</h3>
-<div id="card" class="grid"></div>
+<h3>🎮 Your Card</h3>
+
+<!-- BINGO HEADER -->
+<div class="header">
+  <div class="box">B</div>
+  <div class="box">I</div>
+  <div class="box">N</div>
+  <div class="box">G</div>
+  <div class="box">O</div>
+</div>
+
+<div id="card" class="card"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
 
 let phone = "";
+let room = "";
 let card = [];
 let called = [];
 
+/* REGISTER */
 function register() {
   phone = document.getElementById("phone").value;
 
@@ -66,39 +111,51 @@ function register() {
   });
 }
 
+/* JOIN ROOM */
 async function join() {
+  room = document.getElementById("room").value;
+
   const res = await fetch("/join", {
     method:"POST",
     headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ phone })
+    body: JSON.stringify({ phone, room })
   });
 
   const data = await res.json();
 
   if (!data.ok) {
-    alert("Not approved");
+    alert("❌ Not approved");
     return;
   }
 
   card = data.cartela;
+  called = [];
+
+  socket.emit("joinRoom", room);
+
   renderCard();
 }
 
+/* RENDER CARD */
 function renderCard() {
   let html = "";
 
   card.flat().forEach(n => {
-    let cls = called.includes(n) ? "cell hit" : "cell";
-    html += `<div class="${cls}">${n}</div>`;
+
+    let isHit = called.includes(n) || n === "FREE";
+
+    html += `<div class="cell ${isHit ? "hit" : ""}">${n}</div>`;
   });
 
   document.getElementById("card").innerHTML = html;
 }
 
-function start() {
-  socket.emit("start");
+/* START GAME */
+function startGame() {
+  socket.emit("start", room);
 }
 
+/* SOCKET EVENTS */
 socket.on("countdown", t => {
   document.getElementById("count").innerText = t;
 });
@@ -108,16 +165,12 @@ socket.on("number", n => {
   renderCard();
 });
 
-socket.on("calledList", list => {
+socket.on("called", list => {
   document.getElementById("called").innerText = list.join(", ");
 });
 
 socket.on("winner", w => {
   document.getElementById("winner").innerText = "🏆 " + w;
-});
-
-socket.on("players", p => {
-  document.getElementById("players").innerText = p.join(", ");
 });
 </script>
 
