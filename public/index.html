@@ -2,21 +2,49 @@
 <html>
 <head>
 <style>
-.grid{display:grid;grid-template-columns:repeat(5,40px);gap:2px}
-.cell{border:1px solid black;padding:5px;text-align:center}
-.card{border:2px solid black;margin:5px;padding:5px;display:inline-block}
-.header{display:grid;grid-template-columns:repeat(5,40px);font-weight:bold}
+body{text-align:center;font-family:Arial}
+
+.cards{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+}
+
+.card{
+  border:2px solid black;
+  margin:5px;
+  padding:5px;
+}
+
+.header{
+  display:grid;
+  grid-template-columns:repeat(5,30px);
+  font-weight:bold;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:repeat(5,30px);
+}
+
+.cell{
+  border:1px solid black;
+  padding:5px;
+}
 </style>
 </head>
+
 <body>
 
 <input id="phone" placeholder="Phone">
 <button onclick="startApp()">Start</button>
-<button onclick="join()">Get Cartelas</button>
+<button onclick="join()">Pick Cartela (10 ETB)</button>
 <button onclick="startGame()">Start Game</button>
 
+<h3>Balance: <span id="bal">0</span></h3>
 <h3 id="count"></h3>
-<div id="cards"></div>
+
+<div id="cards" class="cards"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
@@ -25,11 +53,29 @@ let phone="";
 
 async function startApp(){
   phone=document.getElementById("phone").value;
-  await fetch("/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})});
+
+  await fetch("/register",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({phone})
+  });
+
+  loadBalance();
+}
+
+async function loadBalance(){
+  const res=await fetch("/balance/"+phone);
+  const data=await res.json();
+  document.getElementById("bal").innerText=data.balance;
 }
 
 async function join(){
-  const res=await fetch("/join",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})});
+  const res=await fetch("/join",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({phone})
+  });
+
   const data=await res.json();
 
   if(!data.ok){
@@ -37,24 +83,23 @@ async function join(){
     return;
   }
 
-  generate600();
+  showCards(data.cartela);
+  loadBalance();
 }
 
-/* ===== 600 CARTELAS ===== */
-function generate600(){
+/* ===== SHOW 1 CARD CORRECTLY ===== */
+function showCards(card){
   let html="";
 
-  for(let i=1;i<=600;i++){
-    html+=`
-    <div class="card">
-      <div class="header">
-        <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
-      </div>
-      <div class="grid">
-        ${Array.from({length:25}).map(()=>`<div class="cell">${Math.floor(Math.random()*75)+1}</div>`).join("")}
-      </div>
-    </div>`;
-  }
+  html+=`
+  <div class="card">
+    <div class="header">
+      <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
+    </div>
+    <div class="grid">
+      ${card.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
+    </div>
+  </div>`;
 
   document.getElementById("cards").innerHTML=html;
 }
