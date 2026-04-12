@@ -14,7 +14,7 @@ const io = new Server(server);
 app.use(express.json());
 app.use(express.static("public"));
 
-/* ================= DB ================= */
+/* ================= DATABASE ================= */
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
   .catch(err => console.log(err));
@@ -22,6 +22,7 @@ mongoose.connect(process.env.MONGODB_URI)
 /* ================= TELEGRAM BOT ================= */
 const bot = new TelegramBot(process.env.BOT_TOKEN);
 
+/* IMPORTANT: MUST MATCH WEBHOOK */
 app.post("/bot", (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
@@ -36,7 +37,7 @@ const User = mongoose.model("User", new mongoose.Schema({
   txid: String
 }));
 
-/* ================= ADMIN ================= */
+/* ================= ADMIN PAGE ================= */
 app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "public/admin.html"));
 });
@@ -103,6 +104,7 @@ bot.on("callback_query", async (q) => {
       { phone },
       { status: "approved", balance: 100 }
     );
+
     bot.answerCallbackQuery(q.id, { text: "Approved ✅" });
     bot.sendMessage(q.message.chat.id, `✅ Approved ${phone}`);
   }
@@ -112,6 +114,7 @@ bot.on("callback_query", async (q) => {
       { phone },
       { status: "rejected" }
     );
+
     bot.answerCallbackQuery(q.id, { text: "Rejected ❌" });
     bot.sendMessage(q.message.chat.id, `❌ Rejected ${phone}`);
   }
@@ -123,7 +126,7 @@ app.get("/balance/:phone", async (req, res) => {
   res.json({ balance: user ? user.balance : 0 });
 });
 
-/* ================= FIXED UNIQUE CARTELA ================= */
+/* ================= FIXED CARTELA (NO DUPLICATES) ================= */
 function unique(min, max) {
   const set = new Set();
   while (set.size < 5) {
@@ -165,7 +168,7 @@ app.post("/join", async (req, res) => {
   }
 
   user.balance -= 10;
-  user.cartela = generateCard(); // FIXED UNIQUE
+  user.cartela = generateCard();
   await user.save();
 
   if (!players.includes(phone)) players.push(phone);
@@ -177,13 +180,12 @@ app.post("/join", async (req, res) => {
 
 /* ================= GAME ENGINE ================= */
 let called = [];
-let interval;
 
 function startGame() {
   called = [];
   io.emit("start");
 
-  interval = setInterval(() => {
+  setInterval(() => {
     let num;
     do {
       num = Math.floor(Math.random() * 75) + 1;
@@ -200,12 +202,12 @@ function countdown() {
   let t = 40;
   io.emit("countdown", t);
 
-  const c = setInterval(() => {
+  const timer = setInterval(() => {
     t--;
     io.emit("countdown", t);
 
     if (t <= 0) {
-      clearInterval(c);
+      clearInterval(timer);
       startGame();
     }
   }, 1000);
@@ -217,5 +219,5 @@ io.on("connection", (socket) => {
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT || 10000, () => {
-  console.log("🚀 FULL FIXED BINGO SYSTEM RUNNING");
+  console.log("🚀 BINGO SYSTEM FULLY RUNNING");
 });
