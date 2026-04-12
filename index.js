@@ -36,6 +36,33 @@ const User = mongoose.model("User", new mongoose.Schema({
   txid:String
 }));
 
+/* ================= ADMIN PAGE FIX ================= */
+app.get("/admin", (req,res)=>{
+  res.sendFile(path.join(__dirname,"public/admin.html"));
+});
+
+/* ================= ADMIN API ================= */
+app.get("/admin/list", async(req,res)=>{
+  const users = await User.find();
+  res.json(users);
+});
+
+app.post("/admin/approve/:phone", async(req,res)=>{
+  await User.findOneAndUpdate(
+    {phone:req.params.phone},
+    {status:"approved",balance:100}
+  );
+  res.json({ok:true});
+});
+
+app.post("/admin/reject/:phone", async(req,res)=>{
+  await User.findOneAndUpdate(
+    {phone:req.params.phone},
+    {status:"rejected"}
+  );
+  res.json({ok:true});
+});
+
 /* ================= REGISTER ================= */
 app.post("/register", async(req,res)=>{
   const {phone}=req.body;
@@ -93,8 +120,8 @@ app.get("/balance/:phone", async(req,res)=>{
   res.json({balance:user?user.balance:0});
 });
 
-/* ================= BINGO CARD (NO DUPLICATE) ================= */
-function getUnique(min,max){
+/* ================= CARD (NO DUPLICATE) ================= */
+function unique(min,max){
   let arr=[];
   while(arr.length<5){
     let n=Math.floor(Math.random()*(max-min+1))+min;
@@ -104,11 +131,11 @@ function getUnique(min,max){
 }
 
 function generateCard(){
-  const B=getUnique(1,15);
-  const I=getUnique(16,30);
-  const N=getUnique(31,45);
-  const G=getUnique(46,60);
-  const O=getUnique(61,75);
+  const B=unique(1,15);
+  const I=unique(16,30);
+  const N=unique(31,45);
+  const G=unique(46,60);
+  const O=unique(61,75);
 
   let card=[];
   for(let i=0;i<5;i++){
@@ -171,7 +198,6 @@ function startGame(){
 
   interval=setInterval(()=>{
     let num;
-
     do{
       num=Math.floor(Math.random()*75)+1;
     }while(called.includes(num));
@@ -190,5 +216,5 @@ io.on("connection",(socket)=>{
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FULL SYSTEM RUNNING");
+  console.log("🚀 FINAL SYSTEM WORKING");
 });

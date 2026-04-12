@@ -4,56 +4,39 @@
 
 <h2>ADMIN PANEL</h2>
 
-<button onclick="loadUsers()">Load Users</button>
-<button onclick="startGame()">Start Game</button>
+<button onclick="load()">Refresh Users</button>
 
-<h3>Users</h3>
 <div id="users"></div>
 
-<h3>Players</h3>
-<div id="players"></div>
-
-<h3>Winner</h3>
-<div id="winner"></div>
-
-<script src="/socket.io/socket.io.js"></script>
 <script>
-const socket = io();
-
-async function loadUsers() {
+async function load(){
   const res = await fetch("/admin/list");
-  const data = await res.json();
+  const users = await res.json();
 
-  let html = "";
+  let html="";
 
-  data.forEach(u => {
-    html += `
-      <div>
-        ${u.phone} - ${u.status}
-        <button onclick="approve('${u.phone}')">Approve</button>
-      </div>
-    `;
+  users.forEach(u=>{
+    html+=`
+    <div style="border:1px solid black;margin:5px;padding:5px">
+      ${u.phone} | ${u.status} | ${u.balance}
+      <br>
+      <button onclick="approve('${u.phone}')">Approve</button>
+      <button onclick="reject('${u.phone}')">Reject</button>
+    </div>`;
   });
 
-  document.getElementById("users").innerHTML = html;
+  document.getElementById("users").innerHTML=html;
 }
 
-async function approve(phone) {
-  await fetch("/admin/approve/" + phone, { method:"POST" });
-  loadUsers();
+async function approve(phone){
+  await fetch("/admin/approve/"+phone,{method:"POST"});
+  load();
 }
 
-function startGame() {
-  socket.emit("start");
+async function reject(phone){
+  await fetch("/admin/reject/"+phone,{method:"POST"});
+  load();
 }
-
-socket.on("players", p => {
-  document.getElementById("players").innerText = p.join(", ");
-});
-
-socket.on("winner", w => {
-  document.getElementById("winner").innerText = "🏆 " + w;
-});
 </script>
 
 </body>
