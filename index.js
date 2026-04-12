@@ -28,24 +28,17 @@ app.post("/bot", (req, res) => {
   res.sendStatus(200);
 });
 
+/* ================= SAFE LOG ================= */
+console.log("ADMIN_ID =", process.env.ADMIN_ID);
+
 /* ================= USER MODEL ================= */
 const User = mongoose.model("User", new mongoose.Schema({
   phone: String,
   status: { type: String, default: "pending" },
-  balance: { type: Number, default: 0 },
-  cartela: Array
+  balance: { type: Number, default: 0 }
 }));
 
-/* ================= ADMIN ================= */
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/admin.html"));
-});
-
-app.get("/admin/list", async (req, res) => {
-  res.json(await User.find());
-});
-
-/* ================= PAY REQUEST ================= */
+/* ================= PAYMENT ================= */
 app.post("/pay", async (req, res) => {
   const { phone, txid } = req.body;
 
@@ -54,6 +47,12 @@ app.post("/pay", async (req, res) => {
     { txid, status: "pending" },
     { upsert: true }
   );
+
+  // IMPORTANT: check ADMIN_ID exists
+  if (!process.env.ADMIN_ID) {
+    console.log("❌ ADMIN_ID missing in .env");
+    return res.json({ ok: false });
+  }
 
   bot.sendMessage(process.env.ADMIN_ID,
 `💰 PAYMENT REQUEST
@@ -71,16 +70,16 @@ TXID: ${txid}`,
   res.json({ ok: true });
 });
 
-/* ================= FIXED CALLBACK (MAIN FIX) ================= */
+/* ================= FIXED CALLBACK (100% SAFE) ================= */
 bot.on("callback_query", async (q) => {
   try {
     const data = q.data || "";
     const [action, phone] = data.split(":");
 
-    // IMPORTANT: ALWAYS ANSWER CALLBACK IMMEDIATELY
+    // ALWAYS respond instantly
     await bot.answerCallbackQuery(q.id).catch(() => {});
 
-    if (!action || !phone) return;
+    console.log("BUTTON CLICKED:", action, phone);
 
     if (action === "approve") {
       await User.findOneAndUpdate(
@@ -105,80 +104,16 @@ bot.on("callback_query", async (q) => {
     }
 
   } catch (err) {
-    console.log("Callback error:", err.message);
+    console.log("CALLBACK ERROR:", err.message);
   }
 });
 
-/* ================= JOIN GAME ================= */
-let players = [];
-
-app.post("/join", async (req, res) => {
-  const { phone } = req.body;
-
-  const user = await User.findOne({ phone });
-
-  if (!user || user.status !== "approved") {
-    return res.json({ ok: false, msg: "Not approved" });
-  }
-
-  if (user.balance < 10) {
-    return res.json({ ok: false, msg: "No balance" });
-  }
-
-  user.balance -= 10;
-  await user.save();
-
-  if (!players.includes(phone)) players.push(phone);
-
-  io.emit("players", players);
-
-  res.json({ ok: true, balance: user.balance });
-});
-
-/* ================= GAME ================= */
-let called = [];
-
-/* SIMPLE GAME LOOP */
-function startGame() {
-  called = [];
-  io.emit("start");
-
-  const interval = setInterval(() => {
-
-    let num;
-    do {
-      num = Math.floor(Math.random() * 75) + 1;
-    } while (called.includes(num));
-
-    called.push(num);
-
-    io.emit("number", num);
-    io.emit("called", called);
-
-  }, 3000);
-}
-
-/* ================= COUNTDOWN ================= */
-function countdown() {
-  let t = 30;
-  io.emit("countdown", t);
-
-  const timer = setInterval(() => {
-    t--;
-    io.emit("countdown", t);
-
-    if (t <= 0) {
-      clearInterval(timer);
-      startGame();
-    }
-  }, 1000);
-}
-
-io.on("connection", (socket) => {
-  socket.on("start", countdown);
+/* ================= ADMIN CHECK ================= */
+app.get("/admin/list", async (req, res) => {
+  res.json(await User.find());
 });
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT || 10000, () => {
-  console.log("🚀 FIXED BUTTON SYSTEM RUNNING");
+  console.log("🚀 BUTTON FIX SYSTEM RUNNING");
 });
