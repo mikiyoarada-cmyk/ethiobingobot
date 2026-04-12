@@ -1,217 +1,110 @@
 <!DOCTYPE html>
 <html>
 <head>
-<style>
-.card { border:1px solid black; margin:5px; padding:5px; display:inline-block }
-.cell { width:22px; height:22px; display:inline-block; text-align:center }
-.hit { background:green; color:white; }
-</style>
+  <title>Bingo Game</title>
+  <style>
+    body { font-family: Arial; text-align: center; }
+    .grid { display: grid; grid-template-columns: repeat(5,60px); gap:5px; justify-content:center; }
+    .cell { border:1px solid black; padding:10px; }
+    .marked { background: yellow; }
+  </style>
 </head>
 
 <body>
 
-<h1>B I N G O GAME</h1>
+<h1>B I N G O</h1>
 
-<!-- PAYMENT -->
-<div>
-  <h3>Enter Payment</h3>
-  <input id="phone" placeholder="Phone">
-  <input id="tx" placeholder="Transaction ID">
-  <button onclick="pay()">Submit</button>
-  <p id="status"></p>
-</div>
+<input id="phone" placeholder="Enter phone">
+<button onclick="join()">Join Game (10 ETB)</button>
 
-<hr>
+<h3 id="balance"></h3>
 
-<button onclick="start()">START GAME</button>
+<h2 id="countdown"></h2>
 
-<h2 id="num">-</h2>
+<div class="grid" id="card"></div>
 
-<h3>Called Numbers</h3>
-<div id="history"></div>
+<h3>Called Numbers:</h3>
+<div id="called"></div>
 
-<h3>Cards (600)</h3>
-<div id="cards"></div>
-
-<h3>Winner</h3>
-<div id="winner"></div>
+<h2 id="winner"></h2>
 
 <script src="/socket.io/socket.io.js"></script>
+
 <script>
 const socket = io();
+let card = [];
 
-let called = [];
-let queue = [];
-let cards = [];
-let playing = false;
-let allowed = false;
-
-/* ======================
-   PAYMENT CHECK
-====================== */
-async function pay() {
-  const phone = document.getElementById("phone").value;
-  const tx = document.getElementById("tx").value;
-
-  await fetch("/pay", {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ phone, transactionId: tx })
-  });
-
-  document.getElementById("status").innerText =
-    "Sent! waiting approval";
-}
-
-/* ======================
-   PREFIX B I N G O
-====================== */
-function colRange(col) {
-  const start = col * 15 + 1;
-  return Array.from({length:15}, (_,i)=>start+i);
-}
-
-/* ======================
-   GENERATE 600 CARDS
-====================== */
-function generateCards() {
-  for (let i = 1; i <= 600; i++) {
-
-    let card = [];
-
-    for (let c = 0; c < 5; c++) {
-      let colNums = colRange(c);
-
-      let col = [];
-
-      for (let r = 0; r < 5; r++) {
-        col.push(colNums[Math.floor(Math.random()*15)]);
-      }
-
-      card.push(col);
-    }
-
-    cards.push({ id:i, data:card, won:false });
-  }
-
-  render();
-}
-
-/* ======================
-   RENDER CARDS
-====================== */
-function render() {
-  let html = "";
-
-  cards.forEach(card => {
-    html += `<div class="card"><b>${card.id}</b><br>`;
-
-    for (let r=0;r<5;r++){
-      for (let c=0;c<5;c++){
-        html += `<span class="cell" id="c-${card.id}-${r}-${c}">
-          ${card.data[c][r]}
-        </span>`;
-      }
-      html += "<br>";
-    }
-
-    html += "</div>";
-  });
-
-  document.getElementById("cards").innerHTML = html;
-}
-
-/* ======================
-   CHECK ACCESS
-====================== */
-async function start() {
+/* JOIN GAME */
+async function join(){
   const phone = document.getElementById("phone").value;
 
-  const res = await fetch("/check", {
+  const res = await fetch("/join",{
     method:"POST",
     headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ phone })
+    body:JSON.stringify({ phone })
   });
 
   const data = await res.json();
 
-  if (!data.ok) {
-    alert("Not approved / expired");
+  if(!data.ok){
+    alert(data.msg);
     return;
   }
 
-  allowed = true;
-  socket.emit("start");
+  card = data.cartela;
+  document.getElementById("balance").innerText = "Balance: "+data.balance;
+
+  drawCard();
 }
 
-/* ======================
-   PLAY QUEUE
-====================== */
-socket.on("number", async (num) => {
+/* DRAW CARD */
+function drawCard(){
+  const grid = document.getElementById("card");
+  grid.innerHTML = "";
 
-  queue.push(num);
-  if (playing) return;
-
-  playing = true;
-
-  while(queue.length) {
-    const n = queue.shift();
-    const prefix = getPrefix(n);
-
-    document.getElementById("num").innerText = prefix + "-" + n;
-    called.push(n);
-
-    document.getElementById("history").innerText =
-      called.join(",");
-
-    highlight();
-
-    let audio = new Audio(`voices/${prefix}${n}.mp3`);
-    await audio.play().catch(()=>{});
-    await new Promise(r => audio.onended = r);
-
-    await new Promise(r => setTimeout(r, 3000));
-  }
-
-  playing = false;
-});
-
-function getPrefix(n){
-  if(n<=15)return"B";
-  if(n<=30)return"I";
-  if(n<=45)return"N";
-  if(n<=60)return"G";
-  return"O";
+  card.forEach(row=>{
+    row.forEach(cell=>{
+      const div = document.createElement("div");
+      div.className = "cell";
+      div.innerText = cell;
+      grid.appendChild(div);
+    });
+  });
 }
 
-/* ======================
-   HIGHLIGHT
-====================== */
-function highlight(){
-  cards.forEach(card=>{
-    for(let c=0;c<5;c++){
-      for(let r=0;r<5;r++){
-        let val = card.data[c][r];
-        let el = document.getElementById(`c-${card.id}-${r}-${c}`);
-        if(called.includes(val)){
-          el.classList.add("hit");
-        }
-      }
+/* MARK NUMBERS */
+function mark(num){
+  document.querySelectorAll(".cell").forEach(c=>{
+    if(c.innerText == num){
+      c.classList.add("marked");
     }
   });
 }
 
-socket.on("start", ()=>{
-  called=[];
-  queue=[];
-  document.getElementById("winner").innerText="";
+/* SOCKET EVENTS */
+socket.on("countdown", t=>{
+  document.getElementById("countdown").innerText = "Starting in: "+t;
 });
 
-socket.on("winner",(id)=>{
-  document.getElementById("winner").innerText="🏆 Card "+id+" WIN!";
+socket.on("number", n=>{
+  mark(n);
 });
 
-generateCards();
+socket.on("called", arr=>{
+  document.getElementById("called").innerText = arr.join(", ");
+});
+
+socket.on("winner", w=>{
+  document.getElementById("winner").innerText =
+    "🏆 WINNER: "+w.phone+" ("+w.winner+" ETB)";
+});
+
+socket.on("message", m=>{
+  alert(m);
+});
+
+/* AUTO START */
+socket.emit("start");
 </script>
 
 </body>
