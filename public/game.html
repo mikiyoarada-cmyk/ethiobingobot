@@ -81,9 +81,7 @@ button{
 
 const socket = io();
 
-/* =========================
-   SOUND SYSTEM
-========================= */
+/* ================= SOUND ================= */
 let audioEnabled = false;
 
 document.getElementById("soundBtn").onclick = () => {
@@ -92,9 +90,7 @@ document.getElementById("soundBtn").onclick = () => {
   alert("✅ Sound Enabled");
 };
 
-/* =========================
-   PLAY VOICE
-========================= */
+/* ================= VOICE ================= */
 function playVoice(num){
   if(!audioEnabled) return;
 
@@ -110,9 +106,7 @@ function playVoice(num){
   audio.play().catch(()=>{});
 }
 
-/* =========================
-   CARD GENERATOR
-========================= */
+/* ================= CARD ================= */
 function unique(min,max){
   let arr=[];
   while(arr.length < 5){
@@ -138,9 +132,7 @@ function createCard(){
   ];
 }
 
-/* =========================
-   LOAD CARDS
-========================= */
+/* ================= LOAD CARDS ================= */
 document.getElementById("loadBtn").onclick = () => {
 
   let html = "";
@@ -166,17 +158,13 @@ document.getElementById("loadBtn").onclick = () => {
   alert("✅ 600 Cards Loaded");
 };
 
-/* =========================
-   START GAME
-========================= */
+/* ================= START ================= */
 document.getElementById("startBtn").onclick = () => {
   socket.emit("start");
   alert("🎮 Game Started");
 };
 
-/* =========================
-   SOCKET EVENTS
-========================= */
+/* ================= SOCKET EVENTS ================= */
 socket.on("number",(num)=>{
   playVoice(num);
 });
@@ -192,16 +180,19 @@ socket.on("called",(nums)=>{
   });
 });
 
-/* =========================
-   WINNER EVENT (YOU WANTED THIS)
-========================= */
+/* ================= WINNER ================= */
 socket.on("winner",(data)=>{
-
   alert("🏆 WINNER: " + data.phone + " WON: " + data.winAmount);
 
   document.getElementById("called").innerText =
     "🏆 WINNER: " + data.phone + " WON: " + data.winAmount;
+});
 
+/* ================= SPECTATOR MODE (ADDED) ================= */
+socket.on("spectator",(isSpectator)=>{
+  if(isSpectator){
+    alert("You are spectator (no payment)");
+  }
 });
 
 </script>

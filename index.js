@@ -22,20 +22,24 @@ mongoose.connect(process.env.MONGODB_URI)
 /* ================= BOT ================= */
 const bot = new TelegramBot(process.env.BOT_TOKEN);
 
-/* ================= USER ================= */
+/* ================= USER MODEL ================= */
 const User = mongoose.model("User", new mongoose.Schema({
   phone:String,
-  balance:{type:Number,default:0}
+  txid:String,
+  status:{type:String,default:"pending"},
+  balance:{type:Number,default:0},
+  paid:{type:Boolean,default:false}
 }));
 
-/* ================= GAME ROOM ================= */
+/* ================= GAME STATE ================= */
 let room = {
-  players: {},
+  players: {},        // paid users
+  spectators: {},     // free users
   cards: {},
   called: []
 };
 
-/* ================= CARD GENERATOR ================= */
+/* ================= CARD ================= */
 function unique(min,max){
   let arr=[];
   while(arr.length<5){
@@ -61,13 +65,76 @@ function generateCard(){
   ];
 }
 
-/* ================= START GAME ================= */
+/* ================= PAYMENT ================= */
+app.post("/pay", async(req,res)=>{
+  const {phone,txid}=req.body;
+
+  await User.findOneAndUpdate(
+    {phone},
+    {txid,status:"pending",paid:false},
+    {upsert:true}
+  );
+
+  bot.sendMessage(process.env.ADMIN_ID,
+`💰 PAYMENT REQUEST
+Phone: ${phone}
+TXID: ${txid}`,
+{
+reply_markup:{
+inline_keyboard:[[
+{text:"✅ Approve",callback_data:`approve:${phone}`},
+{text:"❌ Reject",callback_data:`reject:${phone}`}
+]]
+}
+});
+
+  res.json({ok:true});
+});
+
+/* ================= BOT APPROVE ================= */
+bot.on("callback_query",async(q)=>{
+
+  const [action, phone] = q.data.split(":");
+
+  if(action==="approve"){
+    await User.findOneAndUpdate(
+      {phone},
+      {status:"approved",paid:true,balance:0}
+    );
+    bot.answerCallbackQuery(q.id,"Approved");
+  }
+
+  if(action==="reject"){
+    await User.findOneAndUpdate(
+      {phone},
+      {status:"rejected",paid:false}
+    );
+    bot.answerCallbackQuery(q.id,"Rejected");
+  }
+});
+
+/* ================= GAME START ================= */
+function startCountdown(){
+  let t=40;
+  io.emit("countdown",t);
+
+  let cd=setInterval(()=>{
+    t--;
+    io.emit("countdown",t);
+
+    if(t<=0){
+      clearInterval(cd);
+      startGame();
+    }
+  },1000);
+}
+
 function startGame(){
 
-  room.called = [];
+  room.called=[];
   io.emit("start");
 
-  const interval = setInterval(()=>{
+  let interval=setInterval(()=>{
 
     let num;
     do{
@@ -93,13 +160,16 @@ async function checkWinner(){
 
   for(let phone in room.players){
 
+    const user = await User.findOne({phone});
+    if(!user || !user.paid) continue;
+
     const card = room.cards[phone];
     const called = room.called;
 
     let flat = card.flat();
 
     let win = flat.every(n =>
-      n === "FREE" || called.includes(n)
+      n==="FREE" || called.includes(n)
     );
 
     if(win){
@@ -108,12 +178,8 @@ async function checkWinner(){
       const winAmount = total * 0.8;
       const adminCut = total * 0.2;
 
-      const user = await User.findOne({phone});
-
-      if(user){
-        user.balance += winAmount;
-        await user.save();
-      }
+      user.balance += winAmount;
+      await user.save();
 
       io.emit("winner",{phone,winAmount});
 
@@ -131,24 +197,33 @@ Admin: ${adminCut}`);
 /* ================= SOCKET ================= */
 io.on("connection",(socket)=>{
 
-  const roomId = "room1";
-  socket.join(roomId);
+  socket.on("join",async(phone)=>{
 
-  socket.on("join",(phone)=>{
+    const user = await User.findOne({phone});
 
-    room.players[phone] = socket.id;
-    room.cards[phone] = generateCard();
+    if(!user){
+      room.spectators[socket.id]=true;
+      socket.emit("spectator",true);
+      return;
+    }
 
+    if(!user.paid){
+      room.spectators[socket.id]=true;
+      socket.emit("spectator",true);
+      return;
+    }
+
+    room.players[phone]=socket.id;
+    room.cards[phone]=generateCard();
+
+    socket.emit("spectator",false);
     socket.emit("card",room.cards[phone]);
   });
 
-  socket.on("startGame",()=>{
-    startGame();
-  });
-
+  socket.on("start",startCountdown);
 });
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 MULTIPLAYER READY");
+  console.log("🚀 FULL BINGO SYSTEM READY");
 });
