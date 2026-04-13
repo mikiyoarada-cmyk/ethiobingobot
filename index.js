@@ -5,7 +5,6 @@ const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const path = require("path");
-const TelegramBot = require("node-telegram-bot-api");
 
 const app = express();
 const server = http.createServer(app);
@@ -19,200 +18,32 @@ mongoose.connect(process.env.MONGODB_URI)
 .then(()=>console.log("MongoDB connected"))
 .catch(console.log);
 
-/* ================= TELEGRAM ================= */
-const bot = new TelegramBot(process.env.BOT_TOKEN);
-bot.deleteWebHook().catch(()=>{});
-
 /* ================= USER ================= */
 const User = mongoose.model("User", new mongoose.Schema({
   phone:String,
-  telegramName:String,
-  status:{type:String,default:"pending"},
-  joined:Boolean
+  status:{type:String,default:"approved"}
 }));
 
 /* ================= GAME STATE ================= */
-let room = {
+let game = {
+  phase:"waiting", // waiting | countdown | playing | ended
+  countdown:30,
   players:{},
   called:[],
-  started:false,
-  round:1
+  selectedCards:{},
+  round:1,
+  interval:null
 };
-
-/* ================= ADMIN APPROVE / REJECT ================= */
-app.post("/pay", async(req,res)=>{
-  const {phone,telegramName}=req.body;
-
-  await User.findOneAndUpdate(
-    {phone},
-    {phone,telegramName,status:"pending"},
-    {upsert:true}
-  );
-
-  bot.sendMessage(process.env.ADMIN_ID,
-`📥 JOIN REQUEST
-Phone: ${phone}
-Telegram: ${telegramName}`,
-{
-reply_markup:{
-inline_keyboard:[[
-{text:"APPROVE",callback_data:`approve:${phone}`},
-{text:"REJECT",callback_data:`reject:${phone}`}
-]]
-}
-});
-
-  res.json({ok:true});
-});
-
-/* ================= TELEGRAM ACTIONS ================= */
-bot.on("callback_query", async(q)=>{
-
-  const [action, phone] = q.data.split(":");
-  const user = await User.findOne({phone});
-
-  if(!user) return;
-
-  if(action==="approve"){
-    user.status="approved";
-    await user.save();
-    bot.answerCallbackQuery(q.id,"Approved");
-  }
-
-  if(action==="reject"){
-    user.status="rejected";
-    await user.save();
-    bot.answerCallbackQuery(q.id,"Rejected");
-  }
-});
-
-/* ================= SOCKET JOIN ================= */
-io.on("connection",(socket)=>{
-
-  socket.on("join", async(phone)=>{
-
-    const user = await User.findOne({phone});
-
-    if(!user || user.status!=="approved"){
-      return socket.emit("spectator",true);
-    }
-
-    room.players[phone]={
-      socketId:socket.id,
-      card:generateCard()
-    };
-
-    socket.emit("spectator",false);
-    socket.emit("card",room.players[phone].card);
-  });
-
-  socket.on("start",()=>startCountdown());
-});
-
-/* ================= 30 SECOND AUTO START ================= */
-function startCountdown(){
-
-  if(room.started) return;
-  room.started=true;
-
-  let t=30;
-  io.emit("countdown",t);
-
-  let cd=setInterval(()=>{
-
-    t--;
-    io.emit("countdown",t);
-
-    if(t<=0){
-      clearInterval(cd);
-      startGame();
-    }
-
-  },1000);
-}
-
-/* ================= GAME LOOP ================= */
-function startGame(){
-
-  room.called=[];
-  io.emit("start");
-
-  let interval=setInterval(()=>{
-
-    let num;
-    do{
-      num=Math.floor(Math.random()*75)+1;
-    }while(room.called.includes(num));
-
-    room.called.push(num);
-
-    io.emit("number",num);
-    io.emit("called",room.called);
-
-    checkWinner();
-
-    if(room.called.length>=75){
-      clearInterval(interval);
-      endGame();
-    }
-
-  },2500);
-}
-
-/* ================= WIN DETECTION ================= */
-async function checkWinner(){
-
-  for(let phone in room.players){
-
-    const user = await User.findOne({phone});
-    if(!user) continue;
-
-    const card = room.players[phone].card;
-
-    const win = card.flat().every(n =>
-      n==="FREE" || room.called.includes(n)
-    );
-
-    if(win){
-
-      io.emit("winner",{
-        phone,
-        telegramName:user.telegramName
-      });
-
-      bot.sendMessage(process.env.ADMIN_ID,
-`🏆 GOOD BINGO 🎉
-Winner: ${user.telegramName || phone}`);
-
-      endGame();
-      return;
-    }
-  }
-}
-
-/* ================= END GAME ================= */
-function endGame(){
-
-  room.started=false;
-  room.players={};
-  room.called=[];
-  room.round++;
-
-  io.emit("game_end","GOOD BINGO 🎉");
-
-  setTimeout(()=>startCountdown(),5000); // auto restart
-}
 
 /* ================= CARD GENERATOR ================= */
 function generateCard(){
-
   function u(min,max){
-    let a=[];
-    while(a.length<5){
+    let arr=[];
+    while(arr.length<5){
       let n=Math.floor(Math.random()*(max-min+1))+min;
-      if(!a.includes(n)) a.push(n);
+      if(!arr.includes(n)) arr.push(n);
     }
-    return a.sort((a,b)=>a-b);
+    return arr.sort((a,b)=>a-b);
   }
 
   const B=u(1,15),I=u(16,30),N=u(31,45),G=u(46,60),O=u(61,75);
@@ -226,7 +57,132 @@ function generateCard(){
   ];
 }
 
+/* ================= SOCKET ================= */
+io.on("connection",(socket)=>{
+
+  /* JOIN PLAYER */
+  socket.on("join",({phone})=>{
+
+    game.players[phone]={
+      socketId:socket.id,
+      card:generateCard()
+    };
+
+    socket.emit("card",game.players[phone].card);
+  });
+
+  /* SELECT CARTELA BEFORE GAME */
+  socket.on("select_cartela",(phone)=>{
+    if(game.phase!=="waiting"){
+      return socket.emit("wait","Game already started");
+    }
+
+    game.selectedCards[phone]=game.players[phone]?.card;
+    socket.emit("selected","ok");
+  });
+
+  /* START GAME MANUAL TRIGGER */
+  socket.on("start",()=>{
+    if(game.phase==="waiting"){
+      startCountdown();
+    }
+  });
+});
+
+/* ================= COUNTDOWN ================= */
+function startCountdown(){
+
+  game.phase="countdown";
+  game.countdown=30;
+  game.called=[];
+
+  io.emit("phase","countdown");
+
+  let cd=setInterval(()=>{
+
+    game.countdown--;
+    io.emit("countdown",game.countdown);
+
+    if(game.countdown<=0){
+      clearInterval(cd);
+      startGame();
+    }
+
+  },1000);
+}
+
+/* ================= GAME LOOP ================= */
+function startGame(){
+
+  game.phase="playing";
+  io.emit("phase","playing");
+
+  game.interval=setInterval(()=>{
+
+    let num;
+    do{
+      num=Math.floor(Math.random()*75)+1;
+    }while(game.called.includes(num));
+
+    game.called.push(num);
+
+    io.emit("number",num);
+    io.emit("called",game.called);
+
+    checkWinner();
+
+    if(game.called.length>=75){
+      clearInterval(game.interval);
+      endGame();
+    }
+
+  },2500);
+}
+
+/* ================= WIN CHECK ================= */
+function checkWinner(){
+
+  for(let phone in game.selectedCards){
+
+    const card = game.selectedCards[phone];
+    if(!card) continue;
+
+    const win = card.flat().every(n =>
+      n==="FREE" || game.called.includes(n)
+    );
+
+    if(win){
+
+      io.emit("winner",{
+        phone,
+        msg:"GOOD BINGO 🎉"
+      });
+
+      endGame();
+      return;
+    }
+  }
+}
+
+/* ================= END GAME ================= */
+function endGame(){
+
+  game.phase="ended";
+
+  io.emit("game_end","GOOD BINGO 🎉");
+
+  setTimeout(()=>{
+
+    game.round++;
+    game.players={};
+    game.selectedCards={};
+
+    startCountdown();
+
+  },5000);
+}
+
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🔥 CLEAN MULTIPLAYER BINGO READY");
+  console.log("🔥 MULTIPLAYER BINGO FIXED READY");
 });
