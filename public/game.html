@@ -44,6 +44,7 @@ body{text-align:center;font-family:Arial}
 <body>
 
 <h2>🎯 BINGO GAME</h2>
+
 <button onclick="generateCards()">Load 600 Cards</button>
 <button onclick="startGame()">Start Game</button>
 
@@ -54,7 +55,23 @@ body{text-align:center;font-family:Arial}
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket=io();
-let cards=[];
+
+/* ===== VOICE FUNCTION (NEW FIX) ===== */
+function speakNumber(num){
+  let letter="";
+
+  if(num<=15) letter="B";
+  else if(num<=30) letter="I";
+  else if(num<=45) letter="N";
+  else if(num<=60) letter="G";
+  else letter="O";
+
+  const msg = new SpeechSynthesisUtterance(letter + " " + num);
+  msg.rate = 1; // speed
+  msg.pitch = 1;
+
+  speechSynthesis.speak(msg);
+}
 
 /* ===== CARD LOGIC ===== */
 function unique(min,max){
@@ -85,11 +102,9 @@ function createCard(){
 /* ===== GENERATE 600 ===== */
 function generateCards(){
   let html="";
-  cards=[];
 
   for(let i=1;i<=600;i++){
     const card=createCard();
-    cards.push(card);
 
     html+=`
     <div class="card">
@@ -112,6 +127,11 @@ function generateCards(){
 function startGame(){
   socket.emit("start");
 }
+
+/* ===== RECEIVE NUMBERS ===== */
+socket.on("number",(num)=>{
+  speakNumber(num); // 🔥 VOICE HERE
+});
 
 socket.on("called",(nums)=>{
   document.getElementById("called").innerText="Called: "+nums.join(", ");
