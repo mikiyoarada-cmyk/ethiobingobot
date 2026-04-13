@@ -2,7 +2,7 @@
 <html>
 <head>
 <style>
-body{font-family:Arial;text-align:center}
+body{text-align:center;font-family:Arial}
 
 .cards{
   display:flex;
@@ -14,10 +14,9 @@ body{font-family:Arial;text-align:center}
   border:2px solid black;
   margin:5px;
   padding:5px;
-  width:160px;
+  width:150px;
 }
 
-/* HEADER FIX */
 .header{
   display:grid;
   grid-template-columns:repeat(5,1fr);
@@ -25,7 +24,6 @@ body{font-family:Arial;text-align:center}
   background:#ddd;
 }
 
-/* GRID */
 .grid{
   display:grid;
   grid-template-columns:repeat(5,1fr);
@@ -35,22 +33,30 @@ body{font-family:Arial;text-align:center}
   border:1px solid black;
   padding:5px;
 }
+
+.mark{
+  background:green;
+  color:white;
+}
 </style>
 </head>
 
 <body>
 
 <h2>🎯 BINGO GAME</h2>
-
-<button onclick="generateCards()">Generate 600 Cartelas</button>
+<button onclick="generateCards()">Load 600 Cards</button>
+<button onclick="startGame()">Start Game</button>
 
 <h3 id="called"></h3>
 
 <div id="cards" class="cards"></div>
 
+<script src="/socket.io/socket.io.js"></script>
 <script>
+const socket=io();
+let cards=[];
 
-/* ===== REAL BINGO CARD (NO DUPLICATE + CORRECT RANGE) ===== */
+/* ===== CARD LOGIC ===== */
 function unique(min,max){
   let arr=[];
   while(arr.length<5){
@@ -76,18 +82,19 @@ function createCard(){
   ];
 }
 
-/* ===== GENERATE 600 CARDS ===== */
+/* ===== GENERATE 600 ===== */
 function generateCards(){
   let html="";
+  cards=[];
 
   for(let i=1;i<=600;i++){
     const card=createCard();
+    cards.push(card);
 
     html+=`
     <div class="card">
-      <div><b>Card ${i}</b></div>
+      <b>Card ${i}</b>
 
-      <!-- ✅ HEADER FIX -->
       <div class="header">
         <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
       </div>
@@ -101,6 +108,20 @@ function generateCards(){
   document.getElementById("cards").innerHTML=html;
 }
 
+/* ===== GAME ===== */
+function startGame(){
+  socket.emit("start");
+}
+
+socket.on("called",(nums)=>{
+  document.getElementById("called").innerText="Called: "+nums.join(", ");
+
+  document.querySelectorAll(".cell").forEach(c=>{
+    if(nums.includes(Number(c.innerText))){
+      c.classList.add("mark");
+    }
+  });
+});
 </script>
 
 </body>

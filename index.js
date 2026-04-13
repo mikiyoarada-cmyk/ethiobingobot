@@ -19,7 +19,7 @@ mongoose.connect(process.env.MONGODB_URI)
 .then(()=>console.log("MongoDB connected"))
 .catch(err=>console.log(err));
 
-/* ================= TELEGRAM ================= */
+/* ================= BOT ================= */
 const bot = new TelegramBot(process.env.BOT_TOKEN);
 
 app.post("/bot", (req,res)=>{
@@ -27,7 +27,7 @@ app.post("/bot", (req,res)=>{
   res.sendStatus(200);
 });
 
-/* ================= USER ================= */
+/* ================= MODEL ================= */
 const User = mongoose.model("User", new mongoose.Schema({
   phone:String,
   status:{type:String,default:"pending"},
@@ -95,7 +95,7 @@ inline_keyboard:[[
   res.json({ok:true});
 });
 
-/* ================= BOT FIX ================= */
+/* ================= BOT BUTTON ================= */
 bot.on("callback_query", async(q)=>{
   const [action, phone] = q.data.split(":");
 
@@ -104,7 +104,7 @@ bot.on("callback_query", async(q)=>{
       {phone},
       {status:"approved",balance:100}
     );
-    bot.answerCallbackQuery(q.id,"Approved");
+    bot.answerCallbackQuery(q.id,"Approved ✅");
   }
 
   if(action==="reject"){
@@ -112,7 +112,7 @@ bot.on("callback_query", async(q)=>{
       {phone},
       {status:"rejected"}
     );
-    bot.answerCallbackQuery(q.id,"Rejected");
+    bot.answerCallbackQuery(q.id,"Rejected ❌");
   }
 });
 
@@ -122,8 +122,8 @@ app.get("/balance/:phone", async(req,res)=>{
   res.json({balance:user?user.balance:0});
 });
 
-/* ================= PERFECT BINGO CARD ================= */
-function getColumn(min,max){
+/* ================= CARD LOGIC ================= */
+function unique(min,max){
   let arr=[];
   while(arr.length<5){
     let n=Math.floor(Math.random()*(max-min+1))+min;
@@ -133,11 +133,11 @@ function getColumn(min,max){
 }
 
 function generateCard(){
-  const B=getColumn(1,15);     // ONLY 1–15
-  const I=getColumn(16,30);    // ONLY 16–30
-  const N=getColumn(31,45);    // ONLY 31–45
-  const G=getColumn(46,60);    // ONLY 46–60
-  const O=getColumn(61,75);    // ONLY 61–75
+  const B=unique(1,15);
+  const I=unique(16,30);
+  const N=unique(31,45);
+  const G=unique(46,60);
+  const O=unique(61,75);
 
   return [
     [B[0],I[0],N[0],G[0],O[0]],
@@ -147,33 +147,6 @@ function generateCard(){
     [B[4],I[4],N[4],G[4],O[4]],
   ];
 }
-
-/* ================= JOIN ================= */
-let players=[];
-
-app.post("/join", async(req,res)=>{
-  const {phone}=req.body;
-
-  const user=await User.findOne({phone});
-
-  if(!user || user.status!=="approved"){
-    return res.json({ok:false,msg:"Not approved"});
-  }
-
-  if(user.balance<10){
-    return res.json({ok:false,msg:"Insufficient balance"});
-  }
-
-  user.balance -= 10;
-  user.cartela = generateCard();
-  await user.save();
-
-  if(!players.includes(phone)) players.push(phone);
-
-  io.emit("players",players);
-
-  res.json({ok:true,cartela:user.cartela,balance:user.balance});
-});
 
 /* ================= GAME ================= */
 let called=[];
@@ -200,7 +173,6 @@ function startGame(){
 
   interval=setInterval(()=>{
     let num;
-
     do{
       num=Math.floor(Math.random()*75)+1;
     }while(called.includes(num));
@@ -219,5 +191,5 @@ io.on("connection",(socket)=>{
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL PERFECT BINGO RUNNING");
+  console.log("🚀 FINAL PRO SYSTEM RUNNING");
 });
