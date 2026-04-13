@@ -38,10 +38,6 @@ body{text-align:center;font-family:Arial}
   background:green;
   color:white;
 }
-
-.winner{
-  border:3px solid gold;
-}
 </style>
 </head>
 
@@ -49,38 +45,36 @@ body{text-align:center;font-family:Arial}
 
 <h2>🎯 BINGO GAME</h2>
 
-<button onclick="initAudio()">🔊 Enable Sound</button>
-<button onclick="generateCards()">Load 600 Cards</button>
-<button onclick="startGame()">Start Game</button>
+<button id="soundBtn">🔊 Enable Sound</button>
+<button id="loadBtn">Load 600 Cards</button>
+<button id="startBtn">Start Game</button>
 
 <h3 id="called"></h3>
-<h2 id="winner"></h2>
 
 <div id="cards" class="cards"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const socket=io();
-let cards=[];
-let voices=[];
-let audioEnabled=false;
 
-/* 🔊 FIX: LOAD VOICES */
-speechSynthesis.onvoiceschanged = () => {
-  voices = speechSynthesis.getVoices();
+const socket = io();
+
+/* ===== DEBUG ===== */
+console.log("JS LOADED");
+
+/* ===== AUDIO ===== */
+let audioEnabled = false;
+
+document.getElementById("soundBtn").onclick = () => {
+  audioEnabled = true;
+
+  let msg = new SpeechSynthesisUtterance("Sound enabled");
+  speechSynthesis.speak(msg);
+
+  alert("✅ Sound Enabled");
 };
 
-/* 🔊 USER MUST CLICK THIS */
-function initAudio(){
-  audioEnabled=true;
-
-  const test = new SpeechSynthesisUtterance("Sound ready");
-  test.voice = voices[0];
-  speechSynthesis.speak(test);
-}
-
-/* 🔊 SPEAK FUNCTION (FIXED) */
-function speakNumber(num){
+/* ===== SPEAK ===== */
+function speak(num){
   if(!audioEnabled) return;
 
   let letter="";
@@ -90,17 +84,12 @@ function speakNumber(num){
   else if(num<=60) letter="G";
   else letter="O";
 
-  const msg = new SpeechSynthesisUtterance(letter+" "+num);
-
-  msg.voice = voices.find(v=>v.lang.includes("en")) || voices[0];
-  msg.rate = 0.9;
-  msg.pitch = 1;
-
-  speechSynthesis.cancel(); // prevent overlap
+  let msg = new SpeechSynthesisUtterance(letter+" "+num);
+  speechSynthesis.cancel();
   speechSynthesis.speak(msg);
 }
 
-/* 🎯 CARD LOGIC */
+/* ===== CARD ===== */
 function unique(min,max){
   let arr=[];
   while(arr.length<5){
@@ -126,18 +115,18 @@ function createCard(){
   ];
 }
 
-/* 🎯 GENERATE CARDS */
-function generateCards(){
-  let html="";
-  cards=[];
+/* ===== LOAD CARDS (FIXED BUTTON) ===== */
+document.getElementById("loadBtn").onclick = () => {
+  console.log("LOAD CLICKED");
 
-  for(let i=0;i<600;i++){
-    let c=createCard();
-    cards.push(c);
+  let html="";
+
+  for(let i=1;i<=600;i++){
+    const c=createCard();
 
     html+=`
-    <div class="card" id="card${i}">
-      <b>Card ${i+1}</b>
+    <div class="card">
+      <b>Card ${i}</b>
 
       <div class="header">
         <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
@@ -150,36 +139,26 @@ function generateCards(){
   }
 
   document.getElementById("cards").innerHTML=html;
-}
 
-/* 🏆 CHECK WIN */
-function checkWin(card, called){
-  for(let r of card){
-    if(r.every(n => n==="FREE" || called.includes(n))) return true;
-  }
+  alert("✅ 600 Cards Loaded");
+};
 
-  for(let i=0;i<5;i++){
-    let col=true;
-    for(let j=0;j<5;j++){
-      let n=card[j][i];
-      if(!(n==="FREE" || called.includes(n))){
-        col=false;
-      }
-    }
-    if(col) return true;
-  }
+/* ===== START GAME BUTTON FIX ===== */
+document.getElementById("startBtn").onclick = () => {
+  console.log("START CLICKED");
 
-  return false;
-}
-
-/* 🎮 GAME */
-function startGame(){
-  document.getElementById("winner").innerText="";
   socket.emit("start");
-}
+
+  alert("🎮 Game Started");
+};
+
+/* ===== SOCKET ===== */
+socket.on("connect",()=>{
+  console.log("Socket Connected");
+});
 
 socket.on("number",(num)=>{
-  speakNumber(num); // 🔊 VOICE
+  speak(num);
 });
 
 socket.on("called",(nums)=>{
@@ -190,17 +169,8 @@ socket.on("called",(nums)=>{
       c.classList.add("mark");
     }
   });
-
-  for(let i=0;i<cards.length;i++){
-    if(checkWin(cards[i],nums)){
-      document.getElementById("winner").innerText="🏆 GOOD BINGO (Card "+(i+1)+")";
-      document.getElementById("card"+i).classList.add("winner");
-
-      speakNumber(999); // trigger sound
-      return;
-    }
-  }
 });
+
 </script>
 
 </body>
