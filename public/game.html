@@ -2,12 +2,12 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Bingo 600 Cards</title>
+<title>Bingo Game</title>
 
 <style>
 body{
-  font-family:Arial;
   text-align:center;
+  font-family:Arial;
   background:#f5f5f5;
 }
 
@@ -61,18 +61,25 @@ button{
 #called{
   font-size:18px;
 }
+
+#status{
+  font-size:20px;
+  color:red;
+  margin:10px;
+}
 </style>
 </head>
 
 <body>
 
-<h2>🎯 MULTIPLAYER BINGO (600 CARDS)</h2>
+<h2>🎯 MULTIPLAYER BINGO</h2>
 
-<button onclick="loadCards()">Load 600 Cards</button>
-<button onclick="confirmCards()">Confirm Selected Cartelas</button>
-
+<div id="status"></div>
 <h3 id="countdown"></h3>
 <h3 id="called"></h3>
+
+<button onclick="loadCards()">Load 600 Cards</button>
+<button onclick="confirmCards()">Confirm Selection</button>
 
 <div id="cards"></div>
 
@@ -83,7 +90,9 @@ button{
 const socket = io();
 
 let phone = prompt("Enter phone:");
-socket.emit("join", phone);
+let telegramName = prompt("Enter Telegram name:");
+
+socket.emit("join",{phone,telegramName});
 
 let selectedCards = [];
 
@@ -97,7 +106,7 @@ function loadCards(){
     let card = generateCard();
 
     html+=`
-    <div class="card" onclick="selectCard(this, ${i})">
+    <div class="card" onclick="selectCard(this,${i})">
 
       <b>Cartela ${i}</b>
 
@@ -112,7 +121,7 @@ function loadCards(){
     </div>`;
   }
 
-  document.getElementById("cards").innerHTML = html;
+  document.getElementById("cards").innerHTML=html;
 }
 
 /* ================= GENERATE CARD ================= */
@@ -138,7 +147,7 @@ function generateCard(){
   ];
 }
 
-/* ================= SELECT MULTIPLE CARDS ================= */
+/* ================= SELECT CARDS ================= */
 function selectCard(el,index){
 
   el.classList.toggle("selected");
@@ -146,51 +155,72 @@ function selectCard(el,index){
   if(el.classList.contains("selected")){
     selectedCards.push(index);
   }else{
-    selectedCards = selectedCards.filter(x=>x!==index);
+    selectedCards=selectedCards.filter(x=>x!==index);
   }
 }
 
 /* ================= SEND SELECTED ================= */
 function confirmCards(){
+
   socket.emit("select_cartelas",{
     phone,
     cards:selectedCards
   });
 
-  alert("Cartelas Selected ✔");
+  alert("Cartelas confirmed ✔");
 }
 
 /* ================= SOCKET EVENTS ================= */
 
+/* ===== PHASE CONTROL (YOUR REQUEST MERGED) ===== */
+socket.on("phase",(p)=>{
+
+  if(p==="picking"){
+    alert("🟢 PICK YOUR CARTELAS (30 sec)");
+  }
+
+  if(p==="playing"){
+    alert("🎮 GAME STARTED");
+  }
+
+  if(p==="waiting"){
+    document.getElementById("status").innerText="WAIT FOR NEXT GAME";
+  }
+});
+
 /* countdown */
-socket.on("countdown",t=>{
+socket.on("countdown",(t)=>{
   document.getElementById("countdown").innerText="Starts in: "+t;
 });
 
 /* called numbers */
-socket.on("called",nums=>{
+socket.on("called",(nums)=>{
   document.getElementById("called").innerText=nums.join(",");
 
-  document.querySelectorAll(".cell").forEach(cell=>{
-    if(nums.includes(Number(cell.innerText))){
-      cell.classList.add("mark");
+  document.querySelectorAll(".cell").forEach(c=>{
+    if(nums.includes(Number(c.innerText))){
+      c.classList.add("mark");
     }
   });
 });
 
-/* voice support */
-socket.on("number",n=>{
-  let audio = new Audio(`/voices/${n}.mp3`);
+/* voice caller (ALL 75 FIXED) */
+socket.on("number",(n)=>{
+
+  let audio = new Audio(`/voices/B${n}.mp3`);
   audio.play().catch(()=>{});
 });
 
-/* winner */
-socket.on("winner",w=>{
-  alert("🏆 WINNER: "+w.phone+" "+w.msg);
+/* ===== WINNER (YOUR REQUEST MERGED) ===== */
+socket.on("winner",(w)=>{
+
+  alert("🏆 WINNER: "+w.telegramName);
+
+  console.log("Winning Numbers:",w.numbers);
 });
 
 /* game end */
-socket.on("game_end",m=>{
+socket.on("game_end",(m)=>{
   alert(m);
 });
 
