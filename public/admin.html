@@ -1,42 +1,45 @@
 <!DOCTYPE html>
 <html>
+<head>
+<title>Admin Dashboard</title>
+<style>
+body{font-family:Arial;background:#111;color:#fff}
+table{width:100%;margin-top:20px}
+th,td{padding:10px;border:1px solid #444}
+</style>
+</head>
 <body>
 
-<h2>ADMIN PANEL</h2>
+<h1>🔥 ADMIN DASHBOARD</h1>
 
-<button onclick="load()">Refresh</button>
+<button onclick="load()">REFRESH</button>
 
-<div id="users"></div>
+<h2>Users</h2>
+<table id="users"></table>
+
+<h2>Withdraws</h2>
+<table id="withdraws"></table>
 
 <script>
 async function load(){
-  const res=await fetch("/admin/list");
-  const users=await res.json();
+  const res = await fetch("/admin/data");
+  const data = await res.json();
 
-  let html="";
+  document.getElementById("users").innerHTML =
+  "<tr><th>Phone</th><th>Status</th><th>Balance</th></tr>" +
+  data.users.map(u=>
+    `<tr><td>${u.phone}</td><td>${u.status}</td><td>${u.balance}</td></tr>`
+  ).join("");
 
-  users.forEach(u=>{
-    html+=`
-    <div style="border:1px solid black;padding:10px;margin:5px">
-      ${u.phone} | ${u.status} | ${u.balance}
-      <br>
-      <button onclick="approve('${u.phone}')">Approve</button>
-      <button onclick="reject('${u.phone}')">Reject</button>
-    </div>`;
-  });
-
-  document.getElementById("users").innerHTML=html;
+  document.getElementById("withdraws").innerHTML =
+  "<tr><th>Phone</th><th>Amount</th><th>Status</th></tr>" +
+  data.withdraws.map(w=>
+    `<tr><td>${w.phone}</td><td>${w.amount}</td><td>${w.status}</td></tr>`
+  ).join("");
 }
 
-async function approve(phone){
-  await fetch("/admin/approve/"+phone,{method:"POST"});
-  load();
-}
-
-async function reject(phone){
-  await fetch("/admin/reject/"+phone,{method:"POST"});
-  load();
-}
+load();
+setInterval(load,3000);
 </script>
 
 </body>
