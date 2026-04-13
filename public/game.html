@@ -38,6 +38,10 @@ body{text-align:center;font-family:Arial}
   background:green;
   color:white;
 }
+
+.winner{
+  border:3px solid gold;
+}
 </style>
 </head>
 
@@ -49,31 +53,28 @@ body{text-align:center;font-family:Arial}
 <button onclick="startGame()">Start Game</button>
 
 <h3 id="called"></h3>
+<h2 id="winner"></h2>
 
 <div id="cards" class="cards"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket=io();
+let cards=[];
 
-/* ===== VOICE FUNCTION (NEW FIX) ===== */
+/* 🔊 VOICE */
 function speakNumber(num){
   let letter="";
-
   if(num<=15) letter="B";
   else if(num<=30) letter="I";
   else if(num<=45) letter="N";
   else if(num<=60) letter="G";
   else letter="O";
 
-  const msg = new SpeechSynthesisUtterance(letter + " " + num);
-  msg.rate = 1; // speed
-  msg.pitch = 1;
-
-  speechSynthesis.speak(msg);
+  speechSynthesis.speak(new SpeechSynthesisUtterance(letter+" "+num));
 }
 
-/* ===== CARD LOGIC ===== */
+/* 🎯 CARD LOGIC */
 function unique(min,max){
   let arr=[];
   while(arr.length<5){
@@ -99,23 +100,25 @@ function createCard(){
   ];
 }
 
-/* ===== GENERATE 600 ===== */
+/* 🎯 GENERATE CARDS */
 function generateCards(){
   let html="";
+  cards=[];
 
-  for(let i=1;i<=600;i++){
-    const card=createCard();
+  for(let i=0;i<600;i++){
+    let c=createCard();
+    cards.push(c);
 
     html+=`
-    <div class="card">
-      <b>Card ${i}</b>
+    <div class="card" id="card${i}">
+      <b>Card ${i+1}</b>
 
       <div class="header">
         <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
       </div>
 
       <div class="grid">
-        ${card.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
+        ${c.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
       </div>
     </div>`;
   }
@@ -123,17 +126,43 @@ function generateCards(){
   document.getElementById("cards").innerHTML=html;
 }
 
-/* ===== GAME ===== */
+/* 🏆 WIN CHECK */
+function checkWin(card, called){
+  // check rows
+  for(let r of card){
+    if(r.every(n => n==="FREE" || called.includes(n))) return true;
+  }
+
+  // check columns
+  for(let i=0;i<5;i++){
+    let col=true;
+    for(let j=0;j<5;j++){
+      let n=card[j][i];
+      if(!(n==="FREE" || called.includes(n))){
+        col=false;
+      }
+    }
+    if(col) return true;
+  }
+
+  return false;
+}
+
+/* 🎮 GAME */
 function startGame(){
+  document.getElementById("winner").innerText="";
   socket.emit("start");
 }
 
-/* ===== RECEIVE NUMBERS ===== */
+let calledNumbers=[];
+
 socket.on("number",(num)=>{
-  speakNumber(num); // 🔥 VOICE HERE
+  speakNumber(num);
 });
 
 socket.on("called",(nums)=>{
+  calledNumbers=nums;
+
   document.getElementById("called").innerText="Called: "+nums.join(", ");
 
   document.querySelectorAll(".cell").forEach(c=>{
@@ -141,6 +170,19 @@ socket.on("called",(nums)=>{
       c.classList.add("mark");
     }
   });
+
+  // 🏆 CHECK WINNER
+  for(let i=0;i<cards.length;i++){
+    if(checkWin(cards[i],nums)){
+      document.getElementById("winner").innerText="🏆 GOOD BINGO (Card "+(i+1)+")";
+      document.getElementById("card"+i).classList.add("winner");
+
+      speechSynthesis.speak(new SpeechSynthesisUtterance("Good Bingo"));
+
+      socket.off("called"); // stop checking
+      return;
+    }
+  }
 });
 </script>
 
