@@ -5,70 +5,196 @@
 <title>Bingo Game</title>
 
 <style>
-body{text-align:center;font-family:Arial;background:#f5f5f5}
-button{padding:10px;margin:5px;cursor:pointer}
-.card{border:2px solid #000;margin:5px;padding:5px;display:inline-block}
-.cell{border:1px solid #000;padding:5px}
-.mark{background:green;color:white}
+body{
+  text-align:center;
+  font-family:Arial;
+  background:#f5f5f5;
+}
+
+h2{margin-top:10px}
+
+button{
+  padding:10px;
+  margin:5px;
+  cursor:pointer;
+}
+
+.cards{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  margin-top:10px;
+}
+
+.card{
+  border:2px solid #000;
+  margin:5px;
+  padding:5px;
+  width:150px;
+  background:white;
+}
+
+.header{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  font-weight:bold;
+  background:#ddd;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+}
+
+.cell{
+  border:1px solid #000;
+  padding:4px;
+  font-size:12px;
+}
+
+.mark{
+  background:green;
+  color:white;
+}
+
+#called{
+  font-size:18px;
+  margin-top:10px;
+}
 </style>
 </head>
 
 <body>
 
-<h2>🎯 REAL BINGO SYSTEM</h2>
+<h2>🎯 BINGO GAME</h2>
 
-<input id="phone" placeholder="Enter phone">
-<button onclick="join()">Join</button>
-<button onclick="start()">Start</button>
-<button onclick="bingo()">BINGO</button>
+<button id="soundBtn">🔊 Enable Sound</button>
+<button id="loadBtn">Load 600 Cards</button>
+<button id="startBtn">Start Game</button>
 
-<h3 id="balance"></h3>
 <h3 id="called"></h3>
 
-<div id="card"></div>
+<div id="cards" class="cards"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
+
 const socket = io();
 
-let myPhone = "";
+/* =========================
+   SOUND SYSTEM (WORKING)
+========================= */
+let audioEnabled = false;
 
-/* JOIN */
-function join(){
-  myPhone = document.getElementById("phone").value;
-  socket.emit("join",myPhone);
+document.getElementById("soundBtn").onclick = () => {
+  audioEnabled = true;
+
+  // test sound
+  new Audio("/voices/B1.mp3").play().catch(()=>{});
+
+  alert("✅ Sound Enabled");
+};
+
+/* =========================
+   PLAY MP3 VOICE
+========================= */
+function playVoice(num){
+  if(!audioEnabled) return;
+
+  let letter = "";
+
+  if(num <= 15) letter = "B";
+  else if(num <= 30) letter = "I";
+  else if(num <= 45) letter = "N";
+  else if(num <= 60) letter = "G";
+  else letter = "O";
+
+  const audio = new Audio(`/voices/${letter}${num}.mp3`);
+  audio.play().catch(()=>{});
 }
 
-/* START */
-function start(){
+/* =========================
+   CARD GENERATOR (NO DUPLICATES)
+========================= */
+function unique(min,max){
+  let arr=[];
+  while(arr.length < 5){
+    let n = Math.floor(Math.random()*(max-min+1))+min;
+    if(!arr.includes(n)) arr.push(n);
+  }
+  return arr.sort((a,b)=>a-b);
+}
+
+function createCard(){
+  const B = unique(1,15);
+  const I = unique(16,30);
+  const N = unique(31,45);
+  const G = unique(46,60);
+  const O = unique(61,75);
+
+  return [
+    [B[0],I[0],N[0],G[0],O[0]],
+    [B[1],I[1],N[1],G[1],O[1]],
+    [B[2],I[2],"FREE",G[2],O[2]],
+    [B[3],I[3],N[3],G[3],O[3]],
+    [B[4],I[4],N[4],G[4],O[4]],
+  ];
+}
+
+/* =========================
+   LOAD 600 CARDS
+========================= */
+document.getElementById("loadBtn").onclick = () => {
+
+  let html = "";
+
+  for(let i=1;i<=600;i++){
+    const c = createCard();
+
+    html += `
+    <div class="card">
+      <b>Bingo ${i}</b>
+
+      <div class="header">
+        <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
+      </div>
+
+      <div class="grid">
+        ${c.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
+      </div>
+    </div>`;
+  }
+
+  document.getElementById("cards").innerHTML = html;
+  alert("✅ 600 Cards Loaded");
+};
+
+/* =========================
+   START GAME
+========================= */
+document.getElementById("startBtn").onclick = () => {
   socket.emit("start");
-}
+  alert("🎮 Game Started");
+};
 
-/* BINGO */
-function bingo(){
-  socket.emit("bingo",{phone:myPhone});
-}
-
-/* CARD */
-socket.on("card",(card)=>{
-  document.getElementById("card").innerHTML =
-  card.map(r=>r.map(n=>`<div class="cell">${n}</div>`).join("")).join("<br>");
+/* =========================
+   SOCKET EVENTS
+========================= */
+socket.on("number",(num)=>{
+  playVoice(num);
 });
 
-/* BALANCE */
-socket.on("balance",(b)=>{
-  document.getElementById("balance").innerText = "💰 "+b;
-});
-
-/* NUMBERS */
 socket.on("called",(nums)=>{
-  document.getElementById("called").innerText =
-  "Called: " + nums.join(",");
-});
 
-/* WIN */
-socket.on("win",(w)=>{
-  alert("🏆 YOU WIN " + w);
+  document.getElementById("called").innerText =
+    "Called Numbers: " + nums.join(", ");
+
+  document.querySelectorAll(".cell").forEach(c=>{
+    if(nums.includes(Number(c.innerText))){
+      c.classList.add("mark");
+    }
+  });
+
 });
 
 </script>
