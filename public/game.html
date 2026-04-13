@@ -2,178 +2,72 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Bingo Game</title>
+<title>Bingo</title>
 
 <style>
-body{
-  text-align:center;
-  font-family:Arial;
-  background:#f5f5f5;
-}
-
-h2{margin-top:10px}
-
-button{
-  padding:10px;
-  margin:5px;
-  cursor:pointer;
-}
-
-.cards{
-  display:flex;
-  flex-wrap:wrap;
-  justify-content:center;
-  margin-top:10px;
-}
-
-.card{
-  border:2px solid #000;
-  margin:5px;
-  padding:5px;
-  width:150px;
-  background:white;
-}
-
-.header{
-  display:grid;
-  grid-template-columns:repeat(5,1fr);
-  font-weight:bold;
-  background:#ddd;
-}
-
-.grid{
-  display:grid;
-  grid-template-columns:repeat(5,1fr);
-}
-
-.cell{
-  border:1px solid #000;
-  padding:4px;
-  font-size:12px;
-}
-
-.mark{
-  background:green;
-  color:white;
-}
-
-.selected{
-  border:3px solid gold;
-}
-
-#called{
-  font-size:18px;
-  margin-top:10px;
-}
+body{text-align:center;font-family:Arial;background:#f5f5f5;}
+.card{display:inline-block;border:2px solid #000;margin:10px;padding:5px;}
+.cell{border:1px solid #000;padding:5px;width:30px;display:inline-block;}
+.mark{background:green;color:white;}
+#countdown{font-size:20px;}
 </style>
 </head>
 
 <body>
 
-<h2>🎯 MULTIPLAYER BINGO</h2>
-
-<button id="loadBtn">Load 600 Cards</button>
-<button id="selectBtn">Select Cartela</button>
+<h2>🎯 BINGO GAME</h2>
 
 <h3 id="countdown"></h3>
 <h3 id="called"></h3>
 
-<div id="cards" class="cards"></div>
+<div id="card"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
+const socket=io();
 
-const socket = io();
+let phone=prompt("Enter phone:");
+socket.emit("join",phone);
 
-let myPhone = prompt("Enter phone number:");
-let myCard = null;
+socket.on("card",(c)=>{
 
-/* ================= JOIN ================= */
-socket.emit("join",myPhone);
+  let html="<div class='card'>";
 
-/* ================= LOAD CARDS ================= */
-document.getElementById("loadBtn").onclick = ()=>{
-
-  let html="";
-
-  for(let i=1;i<=600;i++){
-
-    html+=`
-    <div class="card">
-      <b>Card ${i}</b>
-
-      <div class="header">
-        <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
-      </div>
-
-      <div class="grid">
-        ${Array(25).fill(0).map(()=>`<div class="cell">-</div>`).join("")}
-      </div>
-    </div>`;
-  }
-
-  document.getElementById("cards").innerHTML=html;
-};
-
-/* ================= SELECT CARTELA ================= */
-document.getElementById("selectBtn").onclick=()=>{
-
-  socket.emit("select_cartela",myPhone);
-
-  alert("Cartela Selected ✔");
-};
-
-/* ================= SOCKET EVENTS ================= */
-
-socket.on("card",(card)=>{
-
-  myCard = card;
-
-  let cells=document.querySelectorAll(".cell");
-
-  let flat=card.flat();
-
-  cells.forEach((c,i)=>{
-    c.innerText=flat[i];
+  c.forEach(row=>{
+    row.forEach(n=>{
+      html+=`<div class='cell'>${n}</div>`;
+    });
+    html+="<br>";
   });
+
+  html+="</div>";
+
+  document.getElementById("card").innerHTML=html;
 });
 
-/* countdown */
 socket.on("countdown",(t)=>{
-  document.getElementById("countdown").innerText =
-  "Game starts in: " + t;
+  document.getElementById("countdown")="Starts in: "+t;
 });
 
-/* called numbers */
 socket.on("number",(n)=>{
-
   document.querySelectorAll(".cell").forEach(c=>{
-    if(Number(c.innerText)===n){
+    if(Number(c.innerText)==n){
       c.classList.add("mark");
     }
   });
 });
 
 socket.on("called",(arr)=>{
-  document.getElementById("called").innerText =
-  "Called: " + arr.join(",");
+  document.getElementById("called").innerText=arr.join(",");
 });
 
-/* winner */
 socket.on("winner",(w)=>{
-  alert("🏆 WINNER: " + w.phone + " " + w.msg);
+  alert("🏆 WINNER: "+w.phone);
 });
 
-/* game end */
 socket.on("game_end",(m)=>{
   alert(m);
 });
-
-/* spectator */
-socket.on("msg",(m)=>{
-  alert(m);
-});
-
 </script>
 
 </body>
