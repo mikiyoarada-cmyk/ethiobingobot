@@ -2,72 +2,198 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Bingo</title>
+<title>Bingo 600 Cards</title>
 
 <style>
-body{text-align:center;font-family:Arial;background:#f5f5f5;}
-.card{display:inline-block;border:2px solid #000;margin:10px;padding:5px;}
-.cell{border:1px solid #000;padding:5px;width:30px;display:inline-block;}
-.mark{background:green;color:white;}
-#countdown{font-size:20px;}
+body{
+  font-family:Arial;
+  text-align:center;
+  background:#f5f5f5;
+}
+
+button{
+  padding:10px;
+  margin:5px;
+}
+
+#cards{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+}
+
+.card{
+  border:2px solid #000;
+  margin:5px;
+  padding:5px;
+  width:160px;
+  cursor:pointer;
+  background:white;
+}
+
+.card.selected{
+  border:4px solid gold;
+}
+
+.header{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  font-weight:bold;
+  background:#ddd;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+}
+
+.cell{
+  border:1px solid #000;
+  font-size:12px;
+  padding:3px;
+}
+
+.mark{
+  background:green;
+  color:white;
+}
+
+#called{
+  font-size:18px;
+}
 </style>
 </head>
 
 <body>
 
-<h2>🎯 BINGO GAME</h2>
+<h2>🎯 MULTIPLAYER BINGO (600 CARDS)</h2>
+
+<button onclick="loadCards()">Load 600 Cards</button>
+<button onclick="confirmCards()">Confirm Selected Cartelas</button>
 
 <h3 id="countdown"></h3>
 <h3 id="called"></h3>
 
-<div id="card"></div>
+<div id="cards"></div>
 
 <script src="/socket.io/socket.io.js"></script>
+
 <script>
-const socket=io();
 
-let phone=prompt("Enter phone:");
-socket.emit("join",phone);
+const socket = io();
 
-socket.on("card",(c)=>{
+let phone = prompt("Enter phone:");
+socket.emit("join", phone);
 
-  let html="<div class='card'>";
+let selectedCards = [];
 
-  c.forEach(row=>{
-    row.forEach(n=>{
-      html+=`<div class='cell'>${n}</div>`;
-    });
-    html+="<br>";
+/* ================= LOAD 600 CARDS ================= */
+function loadCards(){
+
+  let html="";
+
+  for(let i=1;i<=600;i++){
+
+    let card = generateCard();
+
+    html+=`
+    <div class="card" onclick="selectCard(this, ${i})">
+
+      <b>Cartela ${i}</b>
+
+      <div class="header">
+        <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
+      </div>
+
+      <div class="grid">
+        ${card.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
+      </div>
+
+    </div>`;
+  }
+
+  document.getElementById("cards").innerHTML = html;
+}
+
+/* ================= GENERATE CARD ================= */
+function generateCard(){
+
+  function r(min,max){
+    let a=[];
+    while(a.length<5){
+      let n=Math.floor(Math.random()*(max-min+1))+min;
+      if(!a.includes(n)) a.push(n);
+    }
+    return a.sort((a,b)=>a-b);
+  }
+
+  const B=r(1,15),I=r(16,30),N=r(31,45),G=r(46,60),O=r(61,75);
+
+  return [
+    [B[0],I[0],N[0],G[0],O[0]],
+    [B[1],I[1],N[1],G[1],O[1]],
+    [B[2],I[2],"FREE",G[2],O[2]],
+    [B[3],I[3],N[3],G[3],O[3]],
+    [B[4],I[4],N[4],G[4],O[4]],
+  ];
+}
+
+/* ================= SELECT MULTIPLE CARDS ================= */
+function selectCard(el,index){
+
+  el.classList.toggle("selected");
+
+  if(el.classList.contains("selected")){
+    selectedCards.push(index);
+  }else{
+    selectedCards = selectedCards.filter(x=>x!==index);
+  }
+}
+
+/* ================= SEND SELECTED ================= */
+function confirmCards(){
+  socket.emit("select_cartelas",{
+    phone,
+    cards:selectedCards
   });
 
-  html+="</div>";
+  alert("Cartelas Selected ✔");
+}
 
-  document.getElementById("card").innerHTML=html;
+/* ================= SOCKET EVENTS ================= */
+
+/* countdown */
+socket.on("countdown",t=>{
+  document.getElementById("countdown").innerText="Starts in: "+t;
 });
 
-socket.on("countdown",(t)=>{
-  document.getElementById("countdown")="Starts in: "+t;
-});
+/* called numbers */
+socket.on("called",nums=>{
+  document.getElementById("called").innerText=nums.join(",");
 
-socket.on("number",(n)=>{
-  document.querySelectorAll(".cell").forEach(c=>{
-    if(Number(c.innerText)==n){
-      c.classList.add("mark");
+  document.querySelectorAll(".cell").forEach(cell=>{
+    if(nums.includes(Number(cell.innerText))){
+      cell.classList.add("mark");
     }
   });
 });
 
-socket.on("called",(arr)=>{
-  document.getElementById("called").innerText=arr.join(",");
+/* voice support */
+socket.on("number",n=>{
+  let audio = new Audio(`/voices/${n}.mp3`);
+  audio.play().catch(()=>{});
 });
 
-socket.on("winner",(w)=>{
-  alert("🏆 WINNER: "+w.phone);
+/* winner */
+socket.on("winner",w=>{
+  alert("🏆 WINNER: "+w.phone+" "+w.msg);
 });
 
-socket.on("game_end",(m)=>{
+/* game end */
+socket.on("game_end",m=>{
   alert(m);
 });
+
 </script>
 
 </body>
