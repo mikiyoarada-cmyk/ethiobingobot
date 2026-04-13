@@ -57,6 +57,10 @@ button{
   color:white;
 }
 
+.selected{
+  border:3px solid gold;
+}
+
 #called{
   font-size:18px;
   margin-top:10px;
@@ -66,149 +70,107 @@ button{
 
 <body>
 
-<h2>🎯 BINGO GAME</h2>
+<h2>🎯 MULTIPLAYER BINGO</h2>
 
-<button id="soundBtn">🔊 Enable Sound</button>
 <button id="loadBtn">Load 600 Cards</button>
-<button id="startBtn">Start Game</button>
+<button id="selectBtn">Select Cartela</button>
 
+<h3 id="countdown"></h3>
 <h3 id="called"></h3>
 
 <div id="cards" class="cards"></div>
 
 <script src="/socket.io/socket.io.js"></script>
-
 <script>
 
 const socket = io();
 
-/* =========================
-   SOUND SYSTEM
-========================= */
-let audioEnabled = false;
+let myPhone = prompt("Enter phone number:");
+let myCard = null;
 
-document.getElementById("soundBtn").onclick = () => {
-  audioEnabled = true;
-  new Audio("/voices/B1.mp3").play().catch(()=>{});
-  alert("✅ Sound Enabled");
-};
+/* ================= JOIN ================= */
+socket.emit("join",myPhone);
 
-/* =========================
-   VOICE
-========================= */
-function playVoice(num){
-
-  if(!audioEnabled) return;
-
-  let letter="";
-
-  if(num<=15) letter="B";
-  else if(num<=30) letter="I";
-  else if(num<=45) letter="N";
-  else if(num<=60) letter="G";
-  else letter="O";
-
-  new Audio(`/voices/${letter}${num}.mp3`).play().catch(()=>{});
-}
-
-/* =========================
-   CARD GENERATOR
-========================= */
-function unique(min,max){
-  let arr=[];
-  while(arr.length<5){
-    let n=Math.floor(Math.random()*(max-min+1))+min;
-    if(!arr.includes(n)) arr.push(n);
-  }
-  return arr.sort((a,b)=>a-b);
-}
-
-function createCard(){
-  const B=unique(1,15);
-  const I=unique(16,30);
-  const N=unique(31,45);
-  const G=unique(46,60);
-  const O=unique(61,75);
-
-  return [
-    [B[0],I[0],N[0],G[0],O[0]],
-    [B[1],I[1],N[1],G[1],O[1]],
-    [B[2],I[2],"FREE",G[2],O[2]],
-    [B[3],I[3],N[3],G[3],O[3]],
-    [B[4],I[4],N[4],G[4],O[4]],
-  ];
-}
-
-/* =========================
-   LOAD CARDS
-========================= */
-document.getElementById("loadBtn").onclick = () => {
+/* ================= LOAD CARDS ================= */
+document.getElementById("loadBtn").onclick = ()=>{
 
   let html="";
 
   for(let i=1;i<=600;i++){
-    const c=createCard();
 
     html+=`
     <div class="card">
-      <b>Bingo ${i}</b>
+      <b>Card ${i}</b>
 
       <div class="header">
         <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
       </div>
 
       <div class="grid">
-        ${c.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
+        ${Array(25).fill(0).map(()=>`<div class="cell">-</div>`).join("")}
       </div>
     </div>`;
   }
 
   document.getElementById("cards").innerHTML=html;
-  alert("600 Cards Loaded");
 };
 
-/* =========================
-   START GAME
-========================= */
-document.getElementById("startBtn").onclick = () => {
-  socket.emit("start");
+/* ================= SELECT CARTELA ================= */
+document.getElementById("selectBtn").onclick=()=>{
+
+  socket.emit("select_cartela",myPhone);
+
+  alert("Cartela Selected ✔");
 };
 
-/* =========================
-   SOCKET EVENTS (MERGED FIX)
-========================= */
+/* ================= SOCKET EVENTS ================= */
 
-socket.on("phase",(p)=>{
-  console.log("Game phase:",p);
+socket.on("card",(card)=>{
+
+  myCard = card;
+
+  let cells=document.querySelectorAll(".cell");
+
+  let flat=card.flat();
+
+  cells.forEach((c,i)=>{
+    c.innerText=flat[i];
+  });
 });
 
+/* countdown */
 socket.on("countdown",(t)=>{
-  console.log("Start in:",t);
-  document.getElementById("called").innerText="Starting in: "+t;
+  document.getElementById("countdown").innerText =
+  "Game starts in: " + t;
 });
 
+/* called numbers */
 socket.on("number",(n)=>{
-  console.log("Called:",n);
-  playVoice(n);
-});
 
-socket.on("called",(c)=>{
-  console.log(c);
-
-  document.querySelectorAll(".cell").forEach(cell=>{
-    if(c.includes(Number(cell.innerText))){
-      cell.classList.add("mark");
+  document.querySelectorAll(".cell").forEach(c=>{
+    if(Number(c.innerText)===n){
+      c.classList.add("mark");
     }
   });
 });
 
-socket.on("winner",(w)=>{
-  alert("🏆 WINNER: " + w.phone + " " + w.msg);
+socket.on("called",(arr)=>{
   document.getElementById("called").innerText =
-    "🏆 WINNER: " + w.phone + " " + w.msg;
+  "Called: " + arr.join(",");
 });
 
+/* winner */
+socket.on("winner",(w)=>{
+  alert("🏆 WINNER: " + w.phone + " " + w.msg);
+});
+
+/* game end */
 socket.on("game_end",(m)=>{
+  alert(m);
+});
+
+/* spectator */
+socket.on("msg",(m)=>{
   alert(m);
 });
 

@@ -4,7 +4,6 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
-const path = require("path");
 
 const app = express();
 const server = http.createServer(app);
@@ -18,7 +17,7 @@ mongoose.connect(process.env.MONGODB_URI)
 .then(()=>console.log("MongoDB connected"))
 .catch(console.log);
 
-/* ================= USER ================= */
+/* ================= USERS ================= */
 const User = mongoose.model("User", new mongoose.Schema({
   phone:String,
   status:{type:String,default:"approved"}
@@ -31,26 +30,25 @@ let game = {
   players:{},
   selected:{},
   called:[],
-  interval:null,
-  round:1
+  interval:null
 };
 
 /* ================= CARD ================= */
 function generateCard(){
-  function range(min,max){
-    let arr=[];
-    while(arr.length<5){
+  function r(min,max){
+    let a=[];
+    while(a.length<5){
       let n=Math.floor(Math.random()*(max-min+1))+min;
-      if(!arr.includes(n)) arr.push(n);
+      if(!a.includes(n)) a.push(n);
     }
-    return arr.sort((a,b)=>a-b);
+    return a.sort((a,b)=>a-b);
   }
 
-  const B=range(1,15);
-  const I=range(16,30);
-  const N=range(31,45);
-  const G=range(46,60);
-  const O=range(61,75);
+  const B=r(1,15);
+  const I=r(16,30);
+  const N=r(31,45);
+  const G=r(46,60);
+  const O=r(61,75);
 
   return [
     [B[0],I[0],N[0],G[0],O[0]],
@@ -64,46 +62,31 @@ function generateCard(){
 /* ================= SOCKET ================= */
 io.on("connection",(socket)=>{
 
-  console.log("User connected:",socket.id);
-
   /* JOIN */
-  socket.on("join",({phone})=>{
-
-    const card = generateCard();
+  socket.on("join",(phone)=>{
 
     game.players[phone]={
       socketId:socket.id,
-      card
+      card:generateCard()
     };
 
-    socket.emit("card",card);
+    socket.emit("card",game.players[phone].card);
   });
 
   /* SELECT CARTELA */
   socket.on("select_cartela",(phone)=>{
 
     if(game.phase!=="waiting"){
-      return socket.emit("msg","Game already started");
+      return socket.emit("msg","Wait next round");
     }
 
     game.selected[phone]=game.players[phone]?.card;
 
     socket.emit("selected",true);
   });
-
-  /* START GAME */
-  socket.on("start",()=>{
-    if(game.phase==="waiting"){
-      startCountdown();
-    }
-  });
-
-  socket.on("disconnect",()=>{
-    console.log("Disconnected:",socket.id);
-  });
 });
 
-/* ================= COUNTDOWN ================= */
+/* ================= AUTO LOOP START ================= */
 function startCountdown(){
 
   game.phase="countdown";
@@ -111,7 +94,6 @@ function startCountdown(){
   game.selected={};
 
   let t=30;
-
   io.emit("phase","countdown");
 
   let cd=setInterval(()=>{
@@ -131,7 +113,6 @@ function startCountdown(){
 function startGame(){
 
   game.phase="playing";
-
   io.emit("phase","playing");
 
   game.interval=setInterval(()=>{
@@ -170,20 +151,16 @@ function checkWinner(){
 
     if(win){
 
-      io.emit("winner",{
-        phone,
-        msg:"GOOD BINGO 🎉"
-      });
+      io.emit("winner",{phone,msg:"GOOD BINGO 🎉"});
 
-      console.log("WINNER:",phone);
-
+      clearInterval(game.interval);
       endGame();
       return;
     }
   }
 }
 
-/* ================= END GAME ================= */
+/* ================= AUTO RESTART ================= */
 function endGame(){
 
   game.phase="ended";
@@ -192,17 +169,19 @@ function endGame(){
 
   setTimeout(()=>{
 
-    game.round++;
     game.players={};
     game.selected={};
     game.called=[];
 
-    startCountdown();
+    startCountdown(); // 🔥 AUTO RESTART
 
-  },5000);
+  },4000);
 }
+
+/* ================= START FIRST ROUND AUTOMATIC ================= */
+setTimeout(startCountdown,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🔥 STABLE BINGO SYSTEM RUNNING");
+  console.log("🔥 AUTO LOOP BINGO RUNNING");
 });
