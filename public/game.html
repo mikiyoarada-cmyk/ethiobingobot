@@ -1,219 +1,106 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <style>
-    .card {
-      border: 2px solid black;
-      margin: 6px;
-      padding: 6px;
-      display: inline-block;
-      width: 160px;
-      font-size: 12px;
-    }
+<style>
+body{font-family:Arial;text-align:center}
 
-    .cell {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      text-align: center;
-      margin: 1px;
-    }
+.cards{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+}
 
-    .hit {
-      background: green;
-      color: white;
-    }
+.card{
+  border:2px solid black;
+  margin:5px;
+  padding:5px;
+  width:160px;
+}
 
-    #cards {
-      display: flex;
-      flex-wrap: wrap;
-    }
-  </style>
+/* HEADER FIX */
+.header{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  font-weight:bold;
+  background:#ddd;
+}
+
+/* GRID */
+.grid{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+}
+
+.cell{
+  border:1px solid black;
+  padding:5px;
+}
+</style>
 </head>
 
 <body>
 
-<h1>Bingo Live</h1>
+<h2>🎯 BINGO GAME</h2>
 
-<button onclick="start()">Start Game</button>
+<button onclick="generateCards()">Generate 600 Cartelas</button>
 
-<h2 id="num">-</h2>
+<h3 id="called"></h3>
 
-<h3>Called Numbers:</h3>
-<div id="history"></div>
+<div id="cards" class="cards"></div>
 
-<h3>🏆 Winner:</h3>
-<div id="winner"></div>
-
-<h3>Cartelas (600)</h3>
-<div id="cards"></div>
-
-<script src="/socket.io/socket.io.js"></script>
 <script>
-const socket = io();
 
-let called = [];
-let queue = [];
-let playing = false;
-let cards = [];
-
-// PREFIX
-function getPrefix(num) {
-  if (num <= 15) return "B";
-  if (num <= 30) return "I";
-  if (num <= 45) return "N";
-  if (num <= 60) return "G";
-  return "O";
-}
-
-// CHECK WINNER
-function checkCardWin(card) {
-  for (let r = 0; r < 5; r++) {
-    let win = true;
-    for (let c = 0; c < 5; c++) {
-      if (!called.includes(card.data[r][c])) {
-        win = false;
-        break;
-      }
-    }
-    if (win) return true;
+/* ===== REAL BINGO CARD (NO DUPLICATE + CORRECT RANGE) ===== */
+function unique(min,max){
+  let arr=[];
+  while(arr.length<5){
+    let n=Math.floor(Math.random()*(max-min+1))+min;
+    if(!arr.includes(n)) arr.push(n);
   }
-  return false;
+  return arr.sort((a,b)=>a-b);
 }
 
-// PLAY QUEUE
-async function playQueue() {
-  if (playing || queue.length === 0) return;
+function createCard(){
+  const B=unique(1,15);
+  const I=unique(16,30);
+  const N=unique(31,45);
+  const G=unique(46,60);
+  const O=unique(61,75);
 
-  playing = true;
-
-  const num = queue.shift();
-  const prefix = getPrefix(num);
-
-  document.getElementById('num').innerText = prefix + "-" + num;
-
-  called.push(num);
-
-  document.getElementById('history').innerText =
-    called.map(n => getPrefix(n) + "-" + n).join(', ');
-
-  // highlight cards
-  highlightCards();
-
-  // winner check
-  checkWinner();
-
-  let audio = new Audio(`voices/${prefix}${num}.mp3`);
-
-  try { await audio.play(); } catch(e) {}
-
-  await new Promise(r => audio.onended = r);
-
-  await new Promise(r => setTimeout(r, 3000));
-
-  playing = false;
-  playQueue();
+  return [
+    [B[0],I[0],N[0],G[0],O[0]],
+    [B[1],I[1],N[1],G[1],O[1]],
+    [B[2],I[2],"FREE",G[2],O[2]],
+    [B[3],I[3],N[3],G[3],O[3]],
+    [B[4],I[4],N[4],G[4],O[4]],
+  ];
 }
 
-// HIGHLIGHT NUMBERS
-function highlightCards() {
-  cards.forEach(card => {
-    for (let r = 0; r < 5; r++) {
-      for (let c = 0; c < 5; c++) {
-        const val = card.data[r][c];
-        const el = document.getElementById(`c-${card.id}-${r}-${c}`);
-        if (called.includes(val)) {
-          el.classList.add("hit");
-        }
-      }
-    }
-  });
-}
+/* ===== GENERATE 600 CARDS ===== */
+function generateCards(){
+  let html="";
 
-// WINNER CHECK
-function checkWinner() {
-  cards.forEach(card => {
-    if (!card.won && checkCardWin(card)) {
-      card.won = true;
-      socket.emit("winner", card.id);
-    }
-  });
-}
+  for(let i=1;i<=600;i++){
+    const card=createCard();
 
-// GENERATE CARDS
-function generateCards() {
-  for (let i = 1; i <= 600; i++) {
-    let card = [];
+    html+=`
+    <div class="card">
+      <div><b>Card ${i}</b></div>
 
-    for (let r = 0; r < 5; r++) {
-      let row = [];
-      for (let c = 0; c < 5; c++) {
-        row.push(Math.floor(Math.random() * 75) + 1);
-      }
-      card.push(row);
-    }
+      <!-- ✅ HEADER FIX -->
+      <div class="header">
+        <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
+      </div>
 
-    cards.push({ id: i, data: card, won: false });
+      <div class="grid">
+        ${card.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
+      </div>
+    </div>`;
   }
 
-  renderCards();
+  document.getElementById("cards").innerHTML=html;
 }
 
-// RENDER
-function renderCards() {
-  let html = "";
-
-  cards.forEach(c => {
-    html += `<div class="card">
-      <b>Card ${c.id}</b><br>`;
-
-    for (let r = 0; r < 5; r++) {
-      for (let c2 = 0; c2 < 5; c2++) {
-        html += `<span class="cell" id="c-${c.id}-${r}-${c2}">
-          ${c.data[r][c2]}
-        </span>`;
-      }
-      html += "<br>";
-    }
-
-    html += `</div>`;
-  });
-
-  document.getElementById('cards').innerHTML = html;
-}
-
-// START GAME
-socket.on('start', async () => {
-  called = [];
-  queue = [];
-  document.getElementById('history').innerText = "";
-  document.getElementById('winner').innerText = "";
-
-  if (cards.length === 0) generateCards();
-
-  let startAudio = new Audio("voices/start.mp3");
-  await startAudio.play();
-  await new Promise(r => startAudio.onended = r);
-
-  playQueue();
-});
-
-// RECEIVE NUMBERS
-socket.on('number', (num) => {
-  queue.push(num);
-  playQueue();
-});
-
-// WINNER EVENT
-socket.on("winner", (id) => {
-  document.getElementById("winner").innerText =
-    "🏆 Card " + id + " WINS!";
-});
-
-// START BUTTON
-function start() {
-  socket.emit('start');
-}
 </script>
 
 </body>
