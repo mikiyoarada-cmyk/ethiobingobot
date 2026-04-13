@@ -49,6 +49,7 @@ body{text-align:center;font-family:Arial}
 
 <h2>🎯 BINGO GAME</h2>
 
+<button onclick="initAudio()">🔊 Enable Sound</button>
 <button onclick="generateCards()">Load 600 Cards</button>
 <button onclick="startGame()">Start Game</button>
 
@@ -61,9 +62,27 @@ body{text-align:center;font-family:Arial}
 <script>
 const socket=io();
 let cards=[];
+let voices=[];
+let audioEnabled=false;
 
-/* 🔊 VOICE */
+/* 🔊 FIX: LOAD VOICES */
+speechSynthesis.onvoiceschanged = () => {
+  voices = speechSynthesis.getVoices();
+};
+
+/* 🔊 USER MUST CLICK THIS */
+function initAudio(){
+  audioEnabled=true;
+
+  const test = new SpeechSynthesisUtterance("Sound ready");
+  test.voice = voices[0];
+  speechSynthesis.speak(test);
+}
+
+/* 🔊 SPEAK FUNCTION (FIXED) */
 function speakNumber(num){
+  if(!audioEnabled) return;
+
   let letter="";
   if(num<=15) letter="B";
   else if(num<=30) letter="I";
@@ -71,7 +90,14 @@ function speakNumber(num){
   else if(num<=60) letter="G";
   else letter="O";
 
-  speechSynthesis.speak(new SpeechSynthesisUtterance(letter+" "+num));
+  const msg = new SpeechSynthesisUtterance(letter+" "+num);
+
+  msg.voice = voices.find(v=>v.lang.includes("en")) || voices[0];
+  msg.rate = 0.9;
+  msg.pitch = 1;
+
+  speechSynthesis.cancel(); // prevent overlap
+  speechSynthesis.speak(msg);
 }
 
 /* 🎯 CARD LOGIC */
@@ -126,14 +152,12 @@ function generateCards(){
   document.getElementById("cards").innerHTML=html;
 }
 
-/* 🏆 WIN CHECK */
+/* 🏆 CHECK WIN */
 function checkWin(card, called){
-  // check rows
   for(let r of card){
     if(r.every(n => n==="FREE" || called.includes(n))) return true;
   }
 
-  // check columns
   for(let i=0;i<5;i++){
     let col=true;
     for(let j=0;j<5;j++){
@@ -154,15 +178,11 @@ function startGame(){
   socket.emit("start");
 }
 
-let calledNumbers=[];
-
 socket.on("number",(num)=>{
-  speakNumber(num);
+  speakNumber(num); // 🔊 VOICE
 });
 
 socket.on("called",(nums)=>{
-  calledNumbers=nums;
-
   document.getElementById("called").innerText="Called: "+nums.join(", ");
 
   document.querySelectorAll(".cell").forEach(c=>{
@@ -171,15 +191,12 @@ socket.on("called",(nums)=>{
     }
   });
 
-  // 🏆 CHECK WINNER
   for(let i=0;i<cards.length;i++){
     if(checkWin(cards[i],nums)){
       document.getElementById("winner").innerText="🏆 GOOD BINGO (Card "+(i+1)+")";
       document.getElementById("card"+i).classList.add("winner");
 
-      speechSynthesis.speak(new SpeechSynthesisUtterance("Good Bingo"));
-
-      socket.off("called"); // stop checking
+      speakNumber(999); // trigger sound
       return;
     }
   }
