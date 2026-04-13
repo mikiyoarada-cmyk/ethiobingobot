@@ -58,45 +58,22 @@ body{text-align:center;font-family:Arial}
 
 const socket = io();
 
-/* 🔊 AUDIO CONTEXT (FORCE UNLOCK) */
+/* 🔊 AUDIO ENABLE */
 let audioEnabled = false;
-let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-/* 🔊 ENABLE SOUND BUTTON FIX */
-document.getElementById("soundBtn").onclick = async () => {
-  try{
-    await audioCtx.resume(); // unlock audio
+document.getElementById("soundBtn").onclick = () => {
+  audioEnabled = true;
 
-    // play test beep
-    let osc = audioCtx.createOscillator();
-    osc.connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.2);
+  // test sound
+  new Audio("/sounds/B1.mp3").play().catch(()=>{});
 
-    audioEnabled = true;
-
-    // ALSO try voice
-    let msg = new SpeechSynthesisUtterance("Sound enabled");
-    speechSynthesis.speak(msg);
-
-    alert("✅ Sound Enabled");
-  }catch(e){
-    alert("❌ Sound blocked by browser");
-  }
+  alert("✅ Sound Enabled");
 };
 
-/* 🔊 SOUND FUNCTION */
-function playSound(num){
+/* 🔊 PLAY RECORDED SOUND */
+function playRecorded(num){
   if(!audioEnabled) return;
 
-  // 🔔 BEEP SOUND (always works)
-  let osc = audioCtx.createOscillator();
-  osc.frequency.value = 600;
-  osc.connect(audioCtx.destination);
-  osc.start();
-  osc.stop(audioCtx.currentTime + 0.15);
-
-  // 🔊 VOICE (if supported)
   let letter="";
   if(num<=15) letter="B";
   else if(num<=30) letter="I";
@@ -104,11 +81,8 @@ function playSound(num){
   else if(num<=60) letter="G";
   else letter="O";
 
-  try{
-    let msg = new SpeechSynthesisUtterance(letter+" "+num);
-    speechSynthesis.cancel();
-    speechSynthesis.speak(msg);
-  }catch(e){}
+  let audio = new Audio(`/sounds/${letter}${num}.mp3`);
+  audio.play().catch(()=>{});
 }
 
 /* 🎯 CARD */
@@ -171,7 +145,7 @@ document.getElementById("startBtn").onclick = () => {
 
 /* SOCKET */
 socket.on("number",(num)=>{
-  playSound(num); // 🔊 FIXED SOUND
+  playRecorded(num); // 🔊 REAL AUDIO
 });
 
 socket.on("called",(nums)=>{
