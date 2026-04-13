@@ -19,11 +19,11 @@ mongoose.connect(process.env.MONGODB_URI)
 .then(()=>console.log("MongoDB connected"))
 .catch(console.log);
 
-/* ================= TELEGRAM FIXED ================= */
+/* ================= BOT FIXED ================= */
 const bot = new TelegramBot(process.env.BOT_TOKEN);
 bot.deleteWebHook().catch(()=>{});
 
-/* ================= MODELS ================= */
+/* ================= USER ================= */
 const User = mongoose.model("User", new mongoose.Schema({
   phone:String,
   txid:String,
@@ -32,25 +32,19 @@ const User = mongoose.model("User", new mongoose.Schema({
   paid:{type:Boolean,default:false}
 }));
 
+/* ================= WITHDRAW ================= */
 const Withdraw = mongoose.model("Withdraw", new mongoose.Schema({
   phone:String,
   amount:Number,
   status:{type:String,default:"pending"}
 }));
 
-/* ================= ADMIN UI ================= */
+/* ================= ADMIN PAGE ================= */
 app.get("/admin",(req,res)=>{
   res.sendFile(path.join(__dirname,"public/admin.html"));
 });
 
-/* ================= DASHBOARD DATA ================= */
-app.get("/admin/data", async(req,res)=>{
-  const users = await User.find();
-  const withdraws = await Withdraw.find();
-  res.json({users,withdraws});
-});
-
-/* ================= PAYMENT ================= */
+/* ================= PAYMENT REQUEST ================= */
 app.post("/pay", async(req,res)=>{
   const {phone,txid}=req.body;
 
@@ -61,14 +55,16 @@ app.post("/pay", async(req,res)=>{
   );
 
   bot.sendMessage(process.env.ADMIN_ID,
-`💰 PAYMENT
+`💰 PAYMENT REQUEST
 Phone: ${phone}
-TXID: ${txid}`,
+TXID: ${txid}
+
+💡 Manual verify (Telebirr/CBE)`,
 {
 reply_markup:{
 inline_keyboard:[[
-{text:"APPROVE",callback_data:`approve:${phone}`},
-{text:"REJECT",callback_data:`reject:${phone}`}
+{text:"✅ APPROVE",callback_data:`approve:${phone}`},
+{text:"❌ REJECT",callback_data:`reject:${phone}`}
 ]]
 }
 });
@@ -76,12 +72,15 @@ inline_keyboard:[[
   res.json({ok:true});
 });
 
-/* ================= BOT FIX ================= */
+/* ================= TELEGRAM FIX ================= */
 bot.on("callback_query", async(q)=>{
 
   const [action, phone] = q.data.split(":");
-
   const user = await User.findOne({phone});
+
+  if(!user){
+    return bot.answerCallbackQuery(q.id,"User not found");
+  }
 
   if(action==="approve"){
     user.status="approved";
@@ -89,7 +88,7 @@ bot.on("callback_query", async(q)=>{
     user.balance += 100;
     await user.save();
 
-    bot.answerCallbackQuery(q.id,"Approved");
+    bot.answerCallbackQuery(q.id,"Approved ✅");
   }
 
   if(action==="reject"){
@@ -97,61 +96,28 @@ bot.on("callback_query", async(q)=>{
     user.paid=false;
     await user.save();
 
-    bot.answerCallbackQuery(q.id,"Rejected");
+    bot.answerCallbackQuery(q.id,"Rejected ❌");
   }
 });
 
-/* ================= WITHDRAW ================= */
-app.post("/withdraw", async(req,res)=>{
-  const {phone,amount}=req.body;
+/* ================= GAME STATE ================= */
+let room = {
+  players:{},
+  called:[],
+  jackpot:0,
+  round:1
+};
 
-  const user = await User.findOne({phone});
+/* ================= AUTO RESTART SYSTEM ================= */
+function resetGame(){
+  room.called=[];
+  room.jackpot=0;
+  room.round++;
 
-  if(!user || user.balance < amount){
-    return res.json({ok:false});
-  }
-
-  await Withdraw.create({phone,amount});
-
-  bot.sendMessage(process.env.ADMIN_ID,
-`WITHDRAW REQUEST
-${phone} - ${amount}`,
-{
-reply_markup:{
-inline_keyboard:[[
-{text:"PAY",callback_data:`pay:${phone}:${amount}`},
-{text:"REJECT",callback_data:`wreject:${phone}:${amount}`}
-]]
+  io.emit("game_reset",{round:room.round});
 }
-});
 
-  res.json({ok:true});
-});
-
-/* ================= WITHDRAW BOT ================= */
-bot.on("callback_query", async(q)=>{
-
-  const d = q.data.split(":");
-
-  if(d[0]==="pay"){
-    const user = await User.findOne({phone:d[1]});
-    user.balance -= Number(d[2]);
-    await user.save();
-
-    await Withdraw.updateOne({phone:d[1],amount:d[2]},{status:"paid"});
-    bot.answerCallbackQuery(q.id,"Paid");
-  }
-
-  if(d[0]==="wreject"){
-    await Withdraw.updateOne({phone:d[1],amount:d[2]},{status:"rejected"});
-    bot.answerCallbackQuery(q.id,"Rejected");
-  }
-});
-
-/* ================= GAME ================= */
-let room = {players:{},called:[],jackpot:0};
-
-/* ================= AUTO WIN ================= */
+/* ================= WIN CHECK ================= */
 async function checkWinner(){
 
   for(let phone in room.players){
@@ -160,9 +126,10 @@ async function checkWinner(){
     if(!user || !user.paid) continue;
 
     const card = room.players[phone].card;
-    const flat = card.flat();
 
-    const win = flat.every(n=> n==="FREE" || room.called.includes(n));
+    const win = card.flat().every(n =>
+      n==="FREE" || room.called.includes(n)
+    );
 
     if(win){
 
@@ -172,13 +139,15 @@ async function checkWinner(){
       user.balance += winAmount;
       await user.save();
 
-      room.jackpot = 0;
-
       io.emit("winner",{phone,winAmount});
 
       bot.sendMessage(process.env.ADMIN_ID,
-`WINNER: ${phone}
-WIN: ${winAmount}`);
+`🏆 WINNER
+Phone: ${phone}
+Win: ${winAmount}`);
+
+      resetGame();
+      startGame();
 
       return;
     }
@@ -188,29 +157,29 @@ WIN: ${winAmount}`);
 /* ================= GAME LOOP ================= */
 function startGame(){
 
-  room.called=[];
-  io.emit("start");
-
   let interval=setInterval(()=>{
 
-    let n;
-    do{
-      n=Math.floor(Math.random()*75)+1;
-    }while(room.called.includes(n));
+    if(room.called.length>=75){
+      clearInterval(interval);
+      resetGame();
+      startGame();
+      return;
+    }
 
-    room.called.push(n);
+    let num;
+    do{
+      num=Math.floor(Math.random()*75)+1;
+    }while(room.called.includes(num));
+
+    room.called.push(num);
     room.jackpot += 10;
 
-    io.emit("number",n);
+    io.emit("number",num);
     io.emit("called",room.called);
 
     checkWinner();
 
-    if(room.called.length>=75){
-      clearInterval(interval);
-    }
-
-  },2500);
+  },3000);
 }
 
 /* ================= SOCKET ================= */
@@ -260,5 +229,5 @@ function generateCard(){
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🔥 CASINO SYSTEM READY");
+  console.log("🔥 FULL CASINO SYSTEM RUNNING");
 });
