@@ -58,25 +58,45 @@ body{text-align:center;font-family:Arial}
 
 const socket = io();
 
-/* ===== DEBUG ===== */
-console.log("JS LOADED");
-
-/* ===== AUDIO ===== */
+/* 🔊 AUDIO CONTEXT (FORCE UNLOCK) */
 let audioEnabled = false;
+let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-document.getElementById("soundBtn").onclick = () => {
-  audioEnabled = true;
+/* 🔊 ENABLE SOUND BUTTON FIX */
+document.getElementById("soundBtn").onclick = async () => {
+  try{
+    await audioCtx.resume(); // unlock audio
 
-  let msg = new SpeechSynthesisUtterance("Sound enabled");
-  speechSynthesis.speak(msg);
+    // play test beep
+    let osc = audioCtx.createOscillator();
+    osc.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.2);
 
-  alert("✅ Sound Enabled");
+    audioEnabled = true;
+
+    // ALSO try voice
+    let msg = new SpeechSynthesisUtterance("Sound enabled");
+    speechSynthesis.speak(msg);
+
+    alert("✅ Sound Enabled");
+  }catch(e){
+    alert("❌ Sound blocked by browser");
+  }
 };
 
-/* ===== SPEAK ===== */
-function speak(num){
+/* 🔊 SOUND FUNCTION */
+function playSound(num){
   if(!audioEnabled) return;
 
+  // 🔔 BEEP SOUND (always works)
+  let osc = audioCtx.createOscillator();
+  osc.frequency.value = 600;
+  osc.connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.15);
+
+  // 🔊 VOICE (if supported)
   let letter="";
   if(num<=15) letter="B";
   else if(num<=30) letter="I";
@@ -84,12 +104,14 @@ function speak(num){
   else if(num<=60) letter="G";
   else letter="O";
 
-  let msg = new SpeechSynthesisUtterance(letter+" "+num);
-  speechSynthesis.cancel();
-  speechSynthesis.speak(msg);
+  try{
+    let msg = new SpeechSynthesisUtterance(letter+" "+num);
+    speechSynthesis.cancel();
+    speechSynthesis.speak(msg);
+  }catch(e){}
 }
 
-/* ===== CARD ===== */
+/* 🎯 CARD */
 function unique(min,max){
   let arr=[];
   while(arr.length<5){
@@ -115,10 +137,8 @@ function createCard(){
   ];
 }
 
-/* ===== LOAD CARDS (FIXED BUTTON) ===== */
+/* LOAD */
 document.getElementById("loadBtn").onclick = () => {
-  console.log("LOAD CLICKED");
-
   let html="";
 
   for(let i=1;i<=600;i++){
@@ -140,25 +160,18 @@ document.getElementById("loadBtn").onclick = () => {
 
   document.getElementById("cards").innerHTML=html;
 
-  alert("✅ 600 Cards Loaded");
+  alert("✅ Cards Loaded");
 };
 
-/* ===== START GAME BUTTON FIX ===== */
+/* START */
 document.getElementById("startBtn").onclick = () => {
-  console.log("START CLICKED");
-
   socket.emit("start");
-
   alert("🎮 Game Started");
 };
 
-/* ===== SOCKET ===== */
-socket.on("connect",()=>{
-  console.log("Socket Connected");
-});
-
+/* SOCKET */
 socket.on("number",(num)=>{
-  speak(num);
+  playSound(num); // 🔊 FIXED SOUND
 });
 
 socket.on("called",(nums)=>{
