@@ -14,32 +14,115 @@ const io = new Server(server);
 app.use(express.json());
 app.use(express.static("public"));
 
-/* ================= DATABASE ================= */
+/* ================= DB ================= */
 mongoose.connect(process.env.MONGODB_URI)
 .then(()=>console.log("MongoDB connected"))
 .catch(err=>console.log(err));
 
-/* ================= TELEGRAM BOT ================= */
+/* ================= BOT ================= */
 const bot = new TelegramBot(process.env.BOT_TOKEN);
+
 app.post("/bot",(req,res)=>{
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-/* ================= USER MODEL ================= */
+/* ================= MODEL ================= */
 const User = mongoose.model("User", new mongoose.Schema({
   phone:String,
-  balance:{type:Number,default:0},
   status:{type:String,default:"pending"},
+  balance:{type:Number,default:0},
+  cartela:Array,
   txid:String
 }));
 
-/* ================= GAME STATE ================= */
-let called = [];
-let interval;
-let roomPlayers = {};
+/* ================= ADMIN ================= */
+app.get("/admin",(req,res)=>{
+  res.sendFile(path.join(__dirname,"public/admin.html"));
+});
 
-/* ================= CARD GENERATOR ================= */
+app.get("/admin/list", async(req,res)=>{
+  const users = await User.find();
+  res.json(users);
+});
+
+app.post("/admin/approve/:phone", async(req,res)=>{
+  await User.findOneAndUpdate(
+    {phone:req.params.phone},
+    {status:"approved",balance:100}
+  );
+  res.json({ok:true});
+});
+
+app.post("/admin/reject/:phone", async(req,res)=>{
+  await User.findOneAndUpdate(
+    {phone:req.params.phone},
+    {status:"rejected"}
+  );
+  res.json({ok:true});
+});
+
+/* ================= REGISTER ================= */
+app.post("/register", async(req,res)=>{
+  const {phone}=req.body;
+  await User.findOneAndUpdate({phone},{},{upsert:true});
+  res.json({ok:true});
+});
+
+/* ================= PAYMENT ================= */
+app.post("/pay", async(req,res)=>{
+  const {phone,txid}=req.body;
+
+  await User.findOneAndUpdate(
+    {phone},
+    {txid,status:"pending"},
+    {upsert:true}
+  );
+
+  bot.sendMessage(process.env.ADMIN_ID,
+`💰 PAYMENT REQUEST
+Phone: ${phone}
+TXID: ${txid}`,
+{
+reply_markup:{
+inline_keyboard:[[
+{text:"✅ Approve",callback_data:`approve:${phone}`},
+{text:"❌ Reject",callback_data:`reject:${phone}`}
+]]
+}
+});
+
+  res.json({ok:true});
+});
+
+/* ================= BOT CALLBACK ================= */
+bot.on("callback_query", async(q)=>{
+  const [action, phone] = q.data.split(":");
+
+  if(action==="approve"){
+    await User.findOneAndUpdate(
+      {phone},
+      {status:"approved",balance:100}
+    );
+    bot.answerCallbackQuery(q.id,"Approved ✅");
+  }
+
+  if(action==="reject"){
+    await User.findOneAndUpdate(
+      {phone},
+      {status:"rejected"}
+    );
+    bot.answerCallbackQuery(q.id,"Rejected ❌");
+  }
+});
+
+/* ================= BALANCE ================= */
+app.get("/balance/:phone", async(req,res)=>{
+  const user = await User.findOne({phone:req.params.phone});
+  res.json({balance:user ? user.balance : 0});
+});
+
+/* ================= CARD ================= */
 function unique(min,max){
   let arr=[];
   while(arr.length<5){
@@ -65,12 +148,16 @@ function generateCard(){
   ];
 }
 
-/* ================= START GAME ================= */
+/* ================= GAME STATE ================= */
+let called=[];
+let interval;
+
+/* ================= GAME LOGIC ================= */
 function startCountdown(){
-  let t = 10;
+  let t=40;
   io.emit("countdown",t);
 
-  let cd = setInterval(()=>{
+  let cd=setInterval(()=>{
     t--;
     io.emit("countdown",t);
 
@@ -82,10 +169,10 @@ function startCountdown(){
 }
 
 function startGame(){
-  called = [];
+  called=[];
   io.emit("start");
 
-  interval = setInterval(()=>{
+  interval=setInterval(()=>{
     let num;
     do{
       num=Math.floor(Math.random()*75)+1;
@@ -112,40 +199,28 @@ io.on("connection",(socket)=>{
     socket.emit("card",generateCard());
   });
 
-  /* ================= BINGO WIN ================= */
   socket.on("bingo",async({phone})=>{
-
     const user = await User.findOne({phone});
     if(!user) return;
 
-    const reward = 1000;
-    const win = reward * 0.8;
-    const admin = reward * 0.2;
+    const winAmount = 800; // 80%
+    const adminCut = 200;  // 20%
 
-    user.balance += win;
+    user.balance += winAmount;
     await user.save();
 
-    socket.emit("win",win);
+    socket.emit("win",winAmount);
 
     bot.sendMessage(process.env.ADMIN_ID,
-`🏆 WINNER ALERT
+`🏆 WINNER
 Phone: ${phone}
-Win: ${win}
-Admin: ${admin}`);
+Win: ${winAmount}
+Admin: ${adminCut}`);
   });
 
 });
 
-/* ================= ADMIN ================= */
-app.post("/approve/:phone",async(req,res)=>{
-  await User.findOneAndUpdate(
-    {phone:req.params.phone},
-    {status:"approved",balance:100}
-  );
-  res.json({ok:true});
-});
-
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 SYSTEM FULL PRO READY");
+  console.log("🚀 FINAL PRO SYSTEM RUNNING");
 });
