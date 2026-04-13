@@ -19,7 +19,7 @@ mongoose.connect(process.env.MONGODB_URI)
 .then(()=>console.log("MongoDB connected"))
 .catch(err=>console.log(err));
 
-/* ================= BOT (IMPORTANT FIX WEBHOOK) ================= */
+/* ================= TELEGRAM ================= */
 const bot = new TelegramBot(process.env.BOT_TOKEN);
 
 app.post("/bot", (req,res)=>{
@@ -36,13 +36,13 @@ const User = mongoose.model("User", new mongoose.Schema({
   txid:String
 }));
 
-/* ================= ADMIN ROUTES ================= */
-app.get("/admin", (req,res)=>{
+/* ================= ADMIN ================= */
+app.get("/admin",(req,res)=>{
   res.sendFile(path.join(__dirname,"public/admin.html"));
 });
 
 app.get("/admin/list", async(req,res)=>{
-  const users = await User.find();
+  const users=await User.find();
   res.json(users);
 });
 
@@ -95,28 +95,24 @@ inline_keyboard:[[
   res.json({ok:true});
 });
 
-/* ================= BOT BUTTON FIX (IMPORTANT) ================= */
+/* ================= BOT FIX ================= */
 bot.on("callback_query", async(q)=>{
-  const data = q.data;
+  const [action, phone] = q.data.split(":");
 
-  const [action, phone] = data.split(":");
-
-  if(action === "approve"){
+  if(action==="approve"){
     await User.findOneAndUpdate(
       {phone},
       {status:"approved",balance:100}
     );
-    bot.answerCallbackQuery(q.id,"Approved ✅");
-    bot.sendMessage(q.message.chat.id,"✅ Approved " + phone);
+    bot.answerCallbackQuery(q.id,"Approved");
   }
 
-  if(action === "reject"){
+  if(action==="reject"){
     await User.findOneAndUpdate(
       {phone},
       {status:"rejected"}
     );
-    bot.answerCallbackQuery(q.id,"Rejected ❌");
-    bot.sendMessage(q.message.chat.id,"❌ Rejected " + phone);
+    bot.answerCallbackQuery(q.id,"Rejected");
   }
 });
 
@@ -126,21 +122,22 @@ app.get("/balance/:phone", async(req,res)=>{
   res.json({balance:user?user.balance:0});
 });
 
-/* ================= FIXED BINGO CARD (NO DUPLICATES) ================= */
-function generateUnique(min,max){
-  let set=new Set();
-  while(set.size<5){
-    set.add(Math.floor(Math.random()*(max-min+1))+min);
+/* ================= PERFECT BINGO CARD ================= */
+function getColumn(min,max){
+  let arr=[];
+  while(arr.length<5){
+    let n=Math.floor(Math.random()*(max-min+1))+min;
+    if(!arr.includes(n)) arr.push(n);
   }
-  return [...set].sort((a,b)=>a-b);
+  return arr.sort((a,b)=>a-b);
 }
 
 function generateCard(){
-  const B=generateUnique(1,15);
-  const I=generateUnique(16,30);
-  const N=generateUnique(31,45);
-  const G=generateUnique(46,60);
-  const O=generateUnique(61,75);
+  const B=getColumn(1,15);     // ONLY 1–15
+  const I=getColumn(16,30);    // ONLY 16–30
+  const N=getColumn(31,45);    // ONLY 31–45
+  const G=getColumn(46,60);    // ONLY 46–60
+  const O=getColumn(61,75);    // ONLY 61–75
 
   return [
     [B[0],I[0],N[0],G[0],O[0]],
@@ -151,7 +148,7 @@ function generateCard(){
   ];
 }
 
-/* ================= JOIN (FIXED) ================= */
+/* ================= JOIN ================= */
 let players=[];
 
 app.post("/join", async(req,res)=>{
@@ -163,12 +160,12 @@ app.post("/join", async(req,res)=>{
     return res.json({ok:false,msg:"Not approved"});
   }
 
-  if(user.balance < 10){
+  if(user.balance<10){
     return res.json({ok:false,msg:"Insufficient balance"});
   }
 
   user.balance -= 10;
-  user.cartela = generateCard(); // FIXED UNIQUE CARD
+  user.cartela = generateCard();
   await user.save();
 
   if(!players.includes(phone)) players.push(phone);
@@ -222,5 +219,5 @@ io.on("connection",(socket)=>{
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FIXED FULL SYSTEM RUNNING");
+  console.log("🚀 FINAL PERFECT BINGO RUNNING");
 });
