@@ -26,9 +26,8 @@ bot.deleteWebHook().catch(()=>{});
 /* ================= USER ================= */
 const User = mongoose.model("User", new mongoose.Schema({
   phone:String,
-  txid:String,
+  telegramName:String,
   status:{type:String,default:"pending"},
-  balance:{type:Number,default:0}, // used as ENTRY TOKENS only
   joined:Boolean
 }));
 
@@ -36,25 +35,24 @@ const User = mongoose.model("User", new mongoose.Schema({
 let room = {
   players:{},
   called:[],
-  jackpot:0,
-  round:1,
-  started:false
+  started:false,
+  round:1
 };
 
-/* ================= ADMIN APPROVAL (TXID ONLY) ================= */
+/* ================= ADMIN APPROVE / REJECT ================= */
 app.post("/pay", async(req,res)=>{
-  const {phone,txid}=req.body;
+  const {phone,telegramName}=req.body;
 
   await User.findOneAndUpdate(
     {phone},
-    {txid,status:"pending"},
+    {phone,telegramName,status:"pending"},
     {upsert:true}
   );
 
   bot.sendMessage(process.env.ADMIN_ID,
 `📥 JOIN REQUEST
 Phone: ${phone}
-TXID: ${txid}`,
+Telegram: ${telegramName}`,
 {
 reply_markup:{
 inline_keyboard:[[
@@ -67,6 +65,7 @@ inline_keyboard:[[
   res.json({ok:true});
 });
 
+/* ================= TELEGRAM ACTIONS ================= */
 bot.on("callback_query", async(q)=>{
 
   const [action, phone] = q.data.split(":");
@@ -76,20 +75,18 @@ bot.on("callback_query", async(q)=>{
 
   if(action==="approve"){
     user.status="approved";
-    user.balance = 1; // entry token granted
     await user.save();
     bot.answerCallbackQuery(q.id,"Approved");
   }
 
   if(action==="reject"){
     user.status="rejected";
-    user.balance = 0;
     await user.save();
     bot.answerCallbackQuery(q.id,"Rejected");
   }
 });
 
-/* ================= GAME JOIN ================= */
+/* ================= SOCKET JOIN ================= */
 io.on("connection",(socket)=>{
 
   socket.on("join", async(phone)=>{
@@ -97,17 +94,8 @@ io.on("connection",(socket)=>{
     const user = await User.findOne({phone});
 
     if(!user || user.status!=="approved"){
-      socket.emit("spectator",true);
-      return;
+      return socket.emit("spectator",true);
     }
-
-    if(user.balance < 1){
-      socket.emit("insufficient","Need entry approval");
-      return;
-    }
-
-    user.balance -= 1; // consume entry token
-    await user.save();
 
     room.players[phone]={
       socketId:socket.id,
@@ -121,7 +109,7 @@ io.on("connection",(socket)=>{
   socket.on("start",()=>startCountdown());
 });
 
-/* ================= 30 SEC AUTO START ================= */
+/* ================= 30 SECOND AUTO START ================= */
 function startCountdown(){
 
   if(room.started) return;
@@ -151,15 +139,14 @@ function startGame(){
 
   let interval=setInterval(()=>{
 
-    let n;
+    let num;
     do{
-      n=Math.floor(Math.random()*75)+1;
-    }while(room.called.includes(n));
+      num=Math.floor(Math.random()*75)+1;
+    }while(room.called.includes(num));
 
-    room.called.push(n);
-    room.jackpot++;
+    room.called.push(num);
 
-    io.emit("number",n);
+    io.emit("number",num);
     io.emit("called",room.called);
 
     checkWinner();
@@ -172,10 +159,13 @@ function startGame(){
   },2500);
 }
 
-/* ================= WIN CHECK ================= */
+/* ================= WIN DETECTION ================= */
 async function checkWinner(){
 
   for(let phone in room.players){
+
+    const user = await User.findOne({phone});
+    if(!user) continue;
 
     const card = room.players[phone].card;
 
@@ -185,11 +175,14 @@ async function checkWinner(){
 
     if(win){
 
-      io.emit("winner",{phone});
+      io.emit("winner",{
+        phone,
+        telegramName:user.telegramName
+      });
 
       bot.sendMessage(process.env.ADMIN_ID,
-`🏆 WINNER
-${phone}`);
+`🏆 GOOD BINGO 🎉
+Winner: ${user.telegramName || phone}`);
 
       endGame();
       return;
@@ -205,12 +198,12 @@ function endGame(){
   room.called=[];
   room.round++;
 
-  io.emit("game_end","Good Bingo 🎉");
+  io.emit("game_end","GOOD BINGO 🎉");
 
-  bot.sendMessage(process.env.ADMIN_ID,"🎉 Good Bingo - Round Ended");
+  setTimeout(()=>startCountdown(),5000); // auto restart
 }
 
-/* ================= CARD ================= */
+/* ================= CARD GENERATOR ================= */
 function generateCard(){
 
   function u(min,max){
@@ -235,5 +228,5 @@ function generateCard(){
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🔥 SAFE MULTIPLAYER BINGO RUNNING");
+  console.log("🔥 CLEAN MULTIPLAYER BINGO READY");
 });
