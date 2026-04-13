@@ -58,19 +58,19 @@ body{text-align:center;font-family:Arial}
 
 const socket = io();
 
-/* 🔊 AUDIO ENABLE */
 let audioEnabled = false;
 
+/* 🔊 ENABLE SOUND */
 document.getElementById("soundBtn").onclick = () => {
   audioEnabled = true;
 
-  // test sound
-  new Audio("/sounds/B1.mp3").play().catch(()=>{});
+  // test file (FIXED PATH)
+  new Audio("/voices/B1.mp3").play().catch(()=>{});
 
   alert("✅ Sound Enabled");
 };
 
-/* 🔊 PLAY RECORDED SOUND */
+/* 🔊 PLAY AUDIO */
 function playRecorded(num){
   if(!audioEnabled) return;
 
@@ -81,7 +81,7 @@ function playRecorded(num){
   else if(num<=60) letter="G";
   else letter="O";
 
-  let audio = new Audio(`/sounds/${letter}${num}.mp3`);
+  let audio = new Audio(`/voices/${letter}${num}.mp3`);
   audio.play().catch(()=>{});
 }
 
@@ -145,7 +145,7 @@ document.getElementById("startBtn").onclick = () => {
 
 /* SOCKET */
 socket.on("number",(num)=>{
-  playRecorded(num); // 🔊 REAL AUDIO
+  playRecorded(num);
 });
 
 socket.on("called",(nums)=>{
