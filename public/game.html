@@ -1,20 +1,37 @@
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="UTF-8">
+<title>Bingo Game</title>
+
 <style>
-body{text-align:center;font-family:Arial}
+body{
+  text-align:center;
+  font-family:Arial;
+  background:#f5f5f5;
+}
+
+h2{margin-top:10px}
+
+button{
+  padding:10px;
+  margin:5px;
+  cursor:pointer;
+}
 
 .cards{
   display:flex;
   flex-wrap:wrap;
   justify-content:center;
+  margin-top:10px;
 }
 
 .card{
-  border:2px solid black;
+  border:2px solid #000;
   margin:5px;
   padding:5px;
   width:150px;
+  background:white;
 }
 
 .header{
@@ -30,13 +47,19 @@ body{text-align:center;font-family:Arial}
 }
 
 .cell{
-  border:1px solid black;
-  padding:5px;
+  border:1px solid #000;
+  padding:4px;
+  font-size:12px;
 }
 
 .mark{
   background:green;
   color:white;
+}
+
+#called{
+  font-size:18px;
+  margin-top:10px;
 }
 </style>
 </head>
@@ -58,49 +81,56 @@ body{text-align:center;font-family:Arial}
 
 const socket = io();
 
+/* =========================
+   SOUND SYSTEM (WORKING)
+========================= */
 let audioEnabled = false;
 
-/* 🔊 ENABLE SOUND */
 document.getElementById("soundBtn").onclick = () => {
   audioEnabled = true;
 
-  // test file (FIXED PATH)
+  // test sound
   new Audio("/voices/B1.mp3").play().catch(()=>{});
 
   alert("✅ Sound Enabled");
 };
 
-/* 🔊 PLAY AUDIO */
-function playRecorded(num){
+/* =========================
+   PLAY MP3 VOICE
+========================= */
+function playVoice(num){
   if(!audioEnabled) return;
 
-  let letter="";
-  if(num<=15) letter="B";
-  else if(num<=30) letter="I";
-  else if(num<=45) letter="N";
-  else if(num<=60) letter="G";
-  else letter="O";
+  let letter = "";
 
-  let audio = new Audio(`/voices/${letter}${num}.mp3`);
+  if(num <= 15) letter = "B";
+  else if(num <= 30) letter = "I";
+  else if(num <= 45) letter = "N";
+  else if(num <= 60) letter = "G";
+  else letter = "O";
+
+  const audio = new Audio(`/voices/${letter}${num}.mp3`);
   audio.play().catch(()=>{});
 }
 
-/* 🎯 CARD */
+/* =========================
+   CARD GENERATOR (NO DUPLICATES)
+========================= */
 function unique(min,max){
   let arr=[];
-  while(arr.length<5){
-    let n=Math.floor(Math.random()*(max-min+1))+min;
+  while(arr.length < 5){
+    let n = Math.floor(Math.random()*(max-min+1))+min;
     if(!arr.includes(n)) arr.push(n);
   }
   return arr.sort((a,b)=>a-b);
 }
 
 function createCard(){
-  const B=unique(1,15);
-  const I=unique(16,30);
-  const N=unique(31,45);
-  const G=unique(46,60);
-  const O=unique(61,75);
+  const B = unique(1,15);
+  const I = unique(16,30);
+  const N = unique(31,45);
+  const G = unique(46,60);
+  const O = unique(61,75);
 
   return [
     [B[0],I[0],N[0],G[0],O[0]],
@@ -111,16 +141,19 @@ function createCard(){
   ];
 }
 
-/* LOAD */
+/* =========================
+   LOAD 600 CARDS
+========================= */
 document.getElementById("loadBtn").onclick = () => {
-  let html="";
+
+  let html = "";
 
   for(let i=1;i<=600;i++){
-    const c=createCard();
+    const c = createCard();
 
-    html+=`
+    html += `
     <div class="card">
-      <b>Card ${i}</b>
+      <b>Bingo ${i}</b>
 
       <div class="header">
         <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
@@ -132,30 +165,36 @@ document.getElementById("loadBtn").onclick = () => {
     </div>`;
   }
 
-  document.getElementById("cards").innerHTML=html;
-
-  alert("✅ Cards Loaded");
+  document.getElementById("cards").innerHTML = html;
+  alert("✅ 600 Cards Loaded");
 };
 
-/* START */
+/* =========================
+   START GAME
+========================= */
 document.getElementById("startBtn").onclick = () => {
   socket.emit("start");
   alert("🎮 Game Started");
 };
 
-/* SOCKET */
+/* =========================
+   SOCKET EVENTS
+========================= */
 socket.on("number",(num)=>{
-  playRecorded(num);
+  playVoice(num);
 });
 
 socket.on("called",(nums)=>{
-  document.getElementById("called").innerText="Called: "+nums.join(", ");
+
+  document.getElementById("called").innerText =
+    "Called Numbers: " + nums.join(", ");
 
   document.querySelectorAll(".cell").forEach(c=>{
     if(nums.includes(Number(c.innerText))){
       c.classList.add("mark");
     }
   });
+
 });
 
 </script>
