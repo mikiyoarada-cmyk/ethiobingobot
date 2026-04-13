@@ -19,8 +19,11 @@ mongoose.connect(process.env.MONGODB_URI)
 .then(()=>console.log("MongoDB connected"))
 .catch(err=>console.log(err));
 
-/* ================= BOT (FIXED) ================= */
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+/* ================= TELEGRAM BOT (FIXED - NO POLLING ERROR) ================= */
+const bot = new TelegramBot(process.env.BOT_TOKEN);
+
+// IMPORTANT FIX: avoid 409 conflict on Render
+bot.deleteWebHook().catch(()=>{});
 
 /* ================= USER MODEL ================= */
 const User = mongoose.model("User", new mongoose.Schema({
@@ -28,42 +31,13 @@ const User = mongoose.model("User", new mongoose.Schema({
   txid:String,
   status:{type:String,default:"pending"},
   balance:{type:Number,default:0},
-  blocked:{type:Boolean,default:false},
-  joinedAt:{type:Date,default:Date.now}
+  paid:{type:Boolean,default:false},
+  blocked:{type:Boolean,default:false}
 }));
 
-/* ================= WITHDRAW MODEL ================= */
-const Withdraw = mongoose.model("Withdraw", new mongoose.Schema({
-  phone:String,
-  amount:Number,
-  status:{type:String,default:"pending"}
-}));
-
-/* ================= ADMIN PAGE ================= */
+/* ================= ADMIN DASHBOARD ================= */
 app.get("/admin",(req,res)=>{
   res.sendFile(path.join(__dirname,"public/admin.html"));
-});
-
-/* ================= ADMIN API ================= */
-app.get("/admin/users", async(req,res)=>{
-  res.json(await User.find());
-});
-
-app.get("/admin/withdraws", async(req,res)=>{
-  res.json(await Withdraw.find());
-});
-
-/* ================= REGISTER ================= */
-app.post("/register", async(req,res)=>{
-  const {phone}=req.body;
-
-  await User.findOneAndUpdate(
-    {phone},
-    {phone},
-    {upsert:true}
-  );
-
-  res.json({ok:true});
 });
 
 /* ================= PAYMENT ================= */
@@ -92,7 +66,7 @@ inline_keyboard:[[
   res.json({ok:true});
 });
 
-/* ================= BOT FIXED APPROVE/REJECT ================= */
+/* ================= BOT APPROVE / REJECT (FIXED) ================= */
 bot.on("callback_query", async(q)=>{
 
   const [action, phone] = q.data.split(":");
@@ -104,24 +78,30 @@ bot.on("callback_query", async(q)=>{
 
   if(action==="approve"){
     user.status="approved";
+    user.paid=true;
     user.balance += 100;
     await user.save();
 
     bot.answerCallbackQuery(q.id,"Approved ✅");
-    bot.sendMessage(phone,"✅ Payment Approved");
-
+    bot.sendMessage(process.env.ADMIN_ID,`Approved: ${phone}`);
   }
 
   if(action==="reject"){
     user.status="rejected";
+    user.paid=false;
     await user.save();
 
     bot.answerCallbackQuery(q.id,"Rejected ❌");
-    bot.sendMessage(phone,"❌ Payment Rejected");
   }
 });
 
-/* ================= WITHDRAW SYSTEM ================= */
+/* ================= WITHDRAW ================= */
+const Withdraw = mongoose.model("Withdraw", new mongoose.Schema({
+  phone:String,
+  amount:Number,
+  status:{type:String,default:"pending"}
+}));
+
 app.post("/withdraw", async(req,res)=>{
   const {phone,amount}=req.body;
 
@@ -165,7 +145,6 @@ bot.on("callback_query", async(q)=>{
     }
 
     await Withdraw.updateOne({phone,amount},{status:"paid"});
-
     bot.answerCallbackQuery(q.id,"Paid ✅");
   }
 
@@ -174,7 +153,6 @@ bot.on("callback_query", async(q)=>{
     const amount=data[2];
 
     await Withdraw.updateOne({phone,amount},{status:"rejected"});
-
     bot.answerCallbackQuery(q.id,"Rejected ❌");
   }
 });
@@ -212,13 +190,7 @@ function generateCard(){
   ];
 }
 
-/* ================= ANTI CHEAT ================= */
-function antiCheat(phone){
-  const user = room.players[phone];
-  return !!user;
-}
-
-/* ================= START GAME ================= */
+/* ================= GAME START ================= */
 function startCountdown(){
   let t=40;
   io.emit("countdown",t);
@@ -247,7 +219,6 @@ function startGame(){
     }while(room.called.includes(num));
 
     room.called.push(num);
-
     room.jackpot += 10;
 
     io.emit("number",num);
@@ -268,7 +239,7 @@ async function checkWinner(){
   for(let phone in room.players){
 
     const user = await User.findOne({phone});
-    if(!user || user.blocked) continue;
+    if(!user || !user.paid) continue;
 
     const card = room.players[phone].card;
     const called = room.called;
@@ -283,7 +254,6 @@ async function checkWinner(){
 
       const total = room.jackpot || 1000;
       const winAmount = total * 0.8;
-      const adminCut = total * 0.2;
 
       user.balance += winAmount;
       await user.save();
@@ -295,8 +265,7 @@ async function checkWinner(){
       bot.sendMessage(process.env.ADMIN_ID,
 `🏆 WINNER
 Phone: ${phone}
-Win: ${winAmount}
-Admin: ${adminCut}`);
+Win: ${winAmount}`);
 
       return;
     }
@@ -310,8 +279,8 @@ io.on("connection",(socket)=>{
 
     const user = await User.findOne({phone});
 
-    if(!user || user.status!=="approved"){
-      return socket.emit("blocked",true);
+    if(!user || !user.paid){
+      return socket.emit("spectator",true);
     }
 
     room.players[phone]={
@@ -319,6 +288,7 @@ io.on("connection",(socket)=>{
       card:generateCard()
     };
 
+    socket.emit("spectator",false);
     socket.emit("card",room.players[phone].card);
   });
 
@@ -327,5 +297,5 @@ io.on("connection",(socket)=>{
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 PRO MAX BINGO SYSTEM READY");
+  console.log("🚀 CLEAN BINGO SYSTEM READY");
 });
