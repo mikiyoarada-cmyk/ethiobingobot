@@ -26,18 +26,18 @@ const User = mongoose.model("User", new mongoose.Schema({
 
 /* ================= GAME STATE ================= */
 let game = {
-  phase:"waiting", // waiting | countdown | playing | ended
+  phase:"waiting",
   countdown:30,
   players:{},
+  selected:{},
   called:[],
-  selectedCards:{},
-  round:1,
-  interval:null
+  interval:null,
+  round:1
 };
 
-/* ================= CARD GENERATOR ================= */
+/* ================= CARD ================= */
 function generateCard(){
-  function u(min,max){
+  function range(min,max){
     let arr=[];
     while(arr.length<5){
       let n=Math.floor(Math.random()*(max-min+1))+min;
@@ -46,7 +46,11 @@ function generateCard(){
     return arr.sort((a,b)=>a-b);
   }
 
-  const B=u(1,15),I=u(16,30),N=u(31,45),G=u(46,60),O=u(61,75);
+  const B=range(1,15);
+  const I=range(16,30);
+  const N=range(31,45);
+  const G=range(46,60);
+  const O=range(61,75);
 
   return [
     [B[0],I[0],N[0],G[0],O[0]],
@@ -60,32 +64,42 @@ function generateCard(){
 /* ================= SOCKET ================= */
 io.on("connection",(socket)=>{
 
-  /* JOIN PLAYER */
+  console.log("User connected:",socket.id);
+
+  /* JOIN */
   socket.on("join",({phone})=>{
+
+    const card = generateCard();
 
     game.players[phone]={
       socketId:socket.id,
-      card:generateCard()
+      card
     };
 
-    socket.emit("card",game.players[phone].card);
+    socket.emit("card",card);
   });
 
-  /* SELECT CARTELA BEFORE GAME */
+  /* SELECT CARTELA */
   socket.on("select_cartela",(phone)=>{
+
     if(game.phase!=="waiting"){
-      return socket.emit("wait","Game already started");
+      return socket.emit("msg","Game already started");
     }
 
-    game.selectedCards[phone]=game.players[phone]?.card;
-    socket.emit("selected","ok");
+    game.selected[phone]=game.players[phone]?.card;
+
+    socket.emit("selected",true);
   });
 
-  /* START GAME MANUAL TRIGGER */
+  /* START GAME */
   socket.on("start",()=>{
     if(game.phase==="waiting"){
       startCountdown();
     }
+  });
+
+  socket.on("disconnect",()=>{
+    console.log("Disconnected:",socket.id);
   });
 });
 
@@ -93,17 +107,19 @@ io.on("connection",(socket)=>{
 function startCountdown(){
 
   game.phase="countdown";
-  game.countdown=30;
   game.called=[];
+  game.selected={};
+
+  let t=30;
 
   io.emit("phase","countdown");
 
   let cd=setInterval(()=>{
 
-    game.countdown--;
-    io.emit("countdown",game.countdown);
+    t--;
+    io.emit("countdown",t);
 
-    if(game.countdown<=0){
+    if(t<=0){
       clearInterval(cd);
       startGame();
     }
@@ -115,6 +131,7 @@ function startCountdown(){
 function startGame(){
 
   game.phase="playing";
+
   io.emit("phase","playing");
 
   game.interval=setInterval(()=>{
@@ -142,9 +159,9 @@ function startGame(){
 /* ================= WIN CHECK ================= */
 function checkWinner(){
 
-  for(let phone in game.selectedCards){
+  for(let phone in game.selected){
 
-    const card = game.selectedCards[phone];
+    const card = game.selected[phone];
     if(!card) continue;
 
     const win = card.flat().every(n =>
@@ -157,6 +174,8 @@ function checkWinner(){
         phone,
         msg:"GOOD BINGO 🎉"
       });
+
+      console.log("WINNER:",phone);
 
       endGame();
       return;
@@ -175,7 +194,8 @@ function endGame(){
 
     game.round++;
     game.players={};
-    game.selectedCards={};
+    game.selected={};
+    game.called=[];
 
     startCountdown();
 
@@ -184,5 +204,5 @@ function endGame(){
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🔥 MULTIPLAYER BINGO FIXED READY");
+  console.log("🔥 STABLE BINGO SYSTEM RUNNING");
 });
