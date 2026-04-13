@@ -82,21 +82,18 @@ button{
 const socket = io();
 
 /* =========================
-   SOUND SYSTEM (WORKING)
+   SOUND SYSTEM
 ========================= */
 let audioEnabled = false;
 
 document.getElementById("soundBtn").onclick = () => {
   audioEnabled = true;
-
-  // test sound
   new Audio("/voices/B1.mp3").play().catch(()=>{});
-
   alert("✅ Sound Enabled");
 };
 
 /* =========================
-   PLAY MP3 VOICE
+   PLAY VOICE
 ========================= */
 function playVoice(num){
   if(!audioEnabled) return;
@@ -114,7 +111,7 @@ function playVoice(num){
 }
 
 /* =========================
-   CARD GENERATOR (NO DUPLICATES)
+   CARD GENERATOR
 ========================= */
 function unique(min,max){
   let arr=[];
@@ -142,7 +139,7 @@ function createCard(){
 }
 
 /* =========================
-   LOAD 600 CARDS
+   LOAD CARDS
 ========================= */
 document.getElementById("loadBtn").onclick = () => {
 
@@ -185,7 +182,6 @@ socket.on("number",(num)=>{
 });
 
 socket.on("called",(nums)=>{
-
   document.getElementById("called").innerText =
     "Called Numbers: " + nums.join(", ");
 
@@ -194,6 +190,17 @@ socket.on("called",(nums)=>{
       c.classList.add("mark");
     }
   });
+});
+
+/* =========================
+   WINNER EVENT (YOU WANTED THIS)
+========================= */
+socket.on("winner",(data)=>{
+
+  alert("🏆 WINNER: " + data.phone + " WON: " + data.winAmount);
+
+  document.getElementById("called").innerText =
+    "🏆 WINNER: " + data.phone + " WON: " + data.winAmount;
 
 });
 
