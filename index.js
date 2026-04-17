@@ -23,7 +23,8 @@ let game = {
   players:{},
   selected:{},
   called:[],
-  interval:null
+  interval:null,
+  winnerFound:false
 };
 
 /* ================= CARD ================= */
@@ -77,10 +78,11 @@ io.on("connection",(socket)=>{
 function startPickPhase(){
 
   game.phase="picking";
-  game.called=[]; // ✅ RESET NUMBERS
+  game.called=[];
   game.selected={};
+  game.winnerFound=false;
 
-  io.emit("reset"); // ✅ CLEAR FRONTEND
+  io.emit("reset");
   io.emit("phase","picking");
 
   let t=30;
@@ -90,7 +92,7 @@ function startPickPhase(){
     io.emit("countdown",t);
     t--;
 
-    if(t<0){
+    if(t < 0){
       clearInterval(timer);
       startGame();
     }
@@ -106,6 +108,11 @@ function startGame(){
 
   game.interval=setInterval(()=>{
 
+    if(game.winnerFound){
+      clearInterval(game.interval);
+      return;
+    }
+
     let n;
     do{
       n=Math.floor(Math.random()*75)+1;
@@ -117,11 +124,6 @@ function startGame(){
     io.emit("called",game.called);
 
     checkWinner();
-
-    if(game.called.length>=75){
-      clearInterval(game.interval);
-      endGame();
-    }
 
   },2500);
 }
@@ -138,7 +140,9 @@ function checkWinner(){
       n==="FREE" || game.called.includes(n)
     );
 
-    if(win){
+    if(win && !game.winnerFound){
+
+      game.winnerFound = true;
 
       io.emit("winner",{
         phone,
@@ -161,14 +165,14 @@ function endGame(){
   io.emit("game_end","🏆 GOOD BINGO");
 
   setTimeout(()=>{
-    startPickPhase(); // ✅ AUTO RESTART 30s
-  },5000);
+    startPickPhase(); // next game after 30 sec
+  },30000);
 }
 
-/* ================= START ================= */
+/* ================= AUTO START ================= */
 setTimeout(startPickPhase,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL BINGO FIXED RUNNING");
+  console.log("🚀 AUTO BINGO SYSTEM READY");
 });
