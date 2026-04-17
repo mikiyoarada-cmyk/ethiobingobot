@@ -20,10 +20,10 @@ mongoose.connect(process.env.MONGODB_URI)
 /* ================= GAME STATE ================= */
 let game = {
   phase:"waiting",
-  countdown:30,
   players:{},
   selected:{},
-  called:[]
+  called:[],
+  interval:null
 };
 
 /* ================= CARD ================= */
@@ -66,14 +66,14 @@ io.on("connection",(socket)=>{
   socket.on("select_cartelas",(data)=>{
 
     if(game.phase!=="picking"){
-      return socket.emit("msg","Wait next game");
+      return socket.emit("msg","WAIT FOR NEXT GAME");
     }
 
     game.selected[data.phone]=game.players[data.phone];
   });
 });
 
-/* ================= PHASE SYSTEM (FIXED 30s) ================= */
+/* ================= PICK PHASE (30s) ================= */
 function startPickPhase(){
 
   game.phase="picking";
@@ -103,7 +103,7 @@ function startGame(){
   game.phase="playing";
   io.emit("phase","playing");
 
-  let interval=setInterval(()=>{
+  game.interval=setInterval(()=>{
 
     let n;
     do{
@@ -118,7 +118,7 @@ function startGame(){
     checkWinner();
 
     if(game.called.length>=75){
-      clearInterval(interval);
+      clearInterval(game.interval);
       endGame();
     }
 
@@ -133,17 +133,19 @@ function checkWinner(){
     const player=game.selected[phone];
     if(!player?.card) continue;
 
-    const win=player.card.flat().every(n=>
+    const win=player.card.flat().every(n =>
       n==="FREE" || game.called.includes(n)
     );
 
     if(win){
+
       io.emit("winner",{
         phone,
         telegramName:player.telegramName,
         numbers:player.card.flat()
       });
 
+      clearInterval(game.interval);
       endGame();
       return;
     }
@@ -154,15 +156,18 @@ function checkWinner(){
 function endGame(){
 
   game.phase="waiting";
-  io.emit("game_end","GOOD BINGO");
 
-  setTimeout(startPickPhase,5000);
+  io.emit("game_end","🏆 GOOD BINGO");
+
+  setTimeout(()=>{
+    startPickPhase(); // auto restart
+  },5000);
 }
 
-/* ================= START ================= */
+/* ================= AUTO START ================= */
 setTimeout(startPickPhase,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 Bingo Server Running");
+  console.log("🚀 FINAL BINGO RUNNING");
 });
