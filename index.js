@@ -128,17 +128,43 @@ function startGame(){
   },2500);
 }
 
-/* ================= WINNER ================= */
+/* ================= WINNER (REAL BINGO) ================= */
 function checkWinner(){
 
   for(let phone in game.selected){
 
-    const player=game.selected[phone];
+    const player = game.selected[phone];
     if(!player?.card) continue;
 
-    const win=player.card.flat().every(n =>
-      n==="FREE" || game.called.includes(n)
-    );
+    const c = player.card;
+
+    const isMarked = (n) =>
+      n==="FREE" || game.called.includes(n);
+
+    let win = false;
+
+    // ROWS
+    for(let r=0; r<5; r++){
+      if(c[r].every(isMarked)) win = true;
+    }
+
+    // COLUMNS
+    for(let col=0; col<5; col++){
+      let colWin = true;
+      for(let r=0; r<5; r++){
+        if(!isMarked(c[r][col])){
+          colWin = false;
+          break;
+        }
+      }
+      if(colWin) win = true;
+    }
+
+    // DIAGONAL 1
+    if([0,1,2,3,4].every(i => isMarked(c[i][i]))) win = true;
+
+    // DIAGONAL 2
+    if([0,1,2,3,4].every(i => isMarked(c[i][4-i]))) win = true;
 
     if(win && !game.winnerFound){
 
@@ -165,8 +191,8 @@ function endGame(){
   io.emit("game_end","🏆 GOOD BINGO");
 
   setTimeout(()=>{
-    startPickPhase(); // next game after 30 sec
-  },30000);
+    startPickPhase();
+  },30000); // 30 sec next round
 }
 
 /* ================= AUTO START ================= */
@@ -174,5 +200,5 @@ setTimeout(startPickPhase,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 AUTO BINGO SYSTEM READY");
+  console.log("🚀 FINAL AUTO BINGO SYSTEM READY");
 });
