@@ -11,14 +11,6 @@ body{
   background:#f5f5f5;
 }
 
-h2{margin-top:10px}
-
-button{
-  padding:10px;
-  margin:5px;
-  cursor:pointer;
-}
-
 .cards{
   display:flex;
   flex-wrap:wrap;
@@ -101,10 +93,11 @@ document.getElementById("soundBtn").onclick = () => {
   alert("✅ Sound Enabled");
 };
 
-/* ================= DATA ================= */
+/* ================= STATE ================= */
 let selectedCards = [];
+let currentPhase = "waiting";
 
-/* ================= GENERATE CARD ================= */
+/* ================= CARD GENERATOR ================= */
 function generateCard(){
 
   function r(min,max){
@@ -131,7 +124,7 @@ function generateCard(){
   ];
 }
 
-/* ================= LOAD 600 CARDS ================= */
+/* ================= LOAD CARDS ================= */
 function loadCards(){
 
   let html="";
@@ -160,6 +153,11 @@ function loadCards(){
 /* ================= SELECT ================= */
 function selectCard(el,i){
 
+  if(currentPhase !== "picking"){
+    alert("⛔ Please wait for next game");
+    return;
+  }
+
   el.classList.toggle("selected");
 
   if(el.classList.contains("selected")){
@@ -171,13 +169,20 @@ function selectCard(el,i){
 
 /* ================= CONFIRM ================= */
 function confirmCards(){
+
+  if(currentPhase !== "picking"){
+    alert("⛔ Cannot confirm now");
+    return;
+  }
+
   socket.emit("select_cartelas",{phone,cards:selectedCards});
 }
 
 /* ================= SOCKET ================= */
 
-/* PHASE */
 socket.on("phase",(p)=>{
+
+  currentPhase = p;
 
   if(p==="picking"){
     alert("🟢 PICK YOUR CARTELAS (30s)");
@@ -192,12 +197,10 @@ socket.on("phase",(p)=>{
   }
 });
 
-/* COUNTDOWN */
 socket.on("countdown",(t)=>{
   document.getElementById("countdown").innerText="Start in "+t;
 });
 
-/* CALLED NUMBERS */
 socket.on("called",(nums)=>{
   document.getElementById("called").innerText =
     "Called Numbers: " + nums.join(", ");
@@ -226,12 +229,7 @@ socket.on("number",(n)=>{
 
 /* WINNER */
 socket.on("winner",(w)=>{
-
   alert("🏆 WINNER: " + w.telegramName);
-
-  document.getElementById("called").innerText =
-    "🏆 WINNER: " + w.telegramName;
-
   console.log("Winning Numbers:", w.numbers);
 });
 
@@ -240,18 +238,15 @@ socket.on("game_end",(m)=>{
   alert(m);
 });
 
-/* ================= RESET FIX ================= */
+/* RESET */
 socket.on("reset",()=>{
 
-  // clear called text
   document.getElementById("called").innerText = "";
 
-  // remove marks
   document.querySelectorAll(".cell").forEach(c=>{
     c.classList.remove("mark");
   });
 
-  // remove selections
   document.querySelectorAll(".card").forEach(c=>{
     c.classList.remove("selected");
   });
