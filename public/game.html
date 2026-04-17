@@ -5,18 +5,58 @@
 <title>Bingo</title>
 
 <style>
-body{text-align:center;font-family:Arial;background:#f5f5f5;}
-.card{display:inline-block;border:2px solid #000;margin:5px;padding:5px;width:150px;}
-.cell{border:1px solid #000;padding:4px;font-size:12px;}
-.mark{background:green;color:white;}
-.selected{border:4px solid gold;}
-#cards{display:flex;flex-wrap:wrap;justify-content:center;}
+body{
+  text-align:center;
+  font-family:Arial;
+  background:#f5f5f5;
+}
+
+#cards{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+}
+
+.card{
+  border:2px solid #000;
+  margin:5px;
+  padding:5px;
+  width:150px;
+  background:white;
+}
+
+.header{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  font-weight:bold;
+  background:#ddd;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+}
+
+.cell{
+  border:1px solid #000;
+  padding:5px;
+  font-size:12px;
+}
+
+.mark{
+  background:green;
+  color:white;
+}
+
+.selected{
+  border:4px solid gold;
+}
 </style>
 </head>
 
 <body>
 
-<h2>🎯 BINGO</h2>
+<h2>🎯 BINGO GAME</h2>
 
 <h3 id="status"></h3>
 <h3 id="countdown"></h3>
@@ -30,55 +70,70 @@ body{text-align:center;font-family:Arial;background:#f5f5f5;}
 <script src="/socket.io/socket.io.js"></script>
 <script>
 
-const socket=io();
+const socket = io();
 
-let phone=prompt("Enter phone");
-let telegramName=prompt("Enter telegram name");
+let phone = prompt("Enter phone");
+let telegramName = prompt("Enter telegram name");
 
 socket.emit("join",{phone,telegramName});
 
-let selectedCards=[];
+let selectedCards = [];
 
-/* LOAD 600 CARDS */
+/* ================= GENERATE REAL 5x5 CARD ================= */
+function generateCard(){
+
+  function r(min,max){
+    let arr=[];
+    while(arr.length<5){
+      let n=Math.floor(Math.random()*(max-min+1))+min;
+      if(!arr.includes(n)) arr.push(n);
+    }
+    return arr.sort((a,b)=>a-b);
+  }
+
+  const B=r(1,15);
+  const I=r(16,30);
+  const N=r(31,45);
+  const G=r(46,60);
+  const O=r(61,75);
+
+  return [
+    [B[0],I[0],N[0],G[0],O[0]],
+    [B[1],I[1],N[1],G[1],O[1]],
+    [B[2],I[2],"FREE",G[2],O[2]],
+    [B[3],I[3],N[3],G[3],O[3]],
+    [B[4],I[4],N[4],G[4],O[4]]
+  ];
+}
+
+/* ================= LOAD 600 CARDS ================= */
 function loadCards(){
 
   let html="";
 
   for(let i=1;i<=600;i++){
 
-    let card=generateCard();
+    const card = generateCard();
 
-    html+=`
+    html += `
     <div class="card" onclick="selectCard(this,${i})">
-      <b>${i}</b>
-      ${card.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
+      <b>Card ${i}</b>
+
+      <div class="header">
+        <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
+      </div>
+
+      <div class="grid">
+        ${card.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
+      </div>
+
     </div>`;
   }
 
-  document.getElementById("cards").innerHTML=html;
+  document.getElementById("cards").innerHTML = html;
 }
 
-/* GENERATE */
-function generateCard(){
-  function r(min,max){
-    let a=[];
-    while(a.length<5){
-      let n=Math.floor(Math.random()*(max-min+1))+min;
-      if(!a.includes(n)) a.push(n);
-    }
-    return a.sort((a,b)=>a-b);
-  }
-
-  return [
-    ...r(1,15),
-    ...r(16,30),
-    ...r(31,45),
-    ...r(46,60),
-    ...r(61,75)
-  ];
-}
-
-/* SELECT */
+/* ================= SELECT ================= */
 function selectCard(el,i){
 
   el.classList.toggle("selected");
@@ -86,21 +141,30 @@ function selectCard(el,i){
   if(el.classList.contains("selected")){
     selectedCards.push(i);
   }else{
-    selectedCards=selectedCards.filter(x=>x!==i);
+    selectedCards = selectedCards.filter(x=>x!==i);
   }
 }
 
-/* CONFIRM */
+/* ================= CONFIRM ================= */
 function confirmCards(){
   socket.emit("select_cartelas",{phone,cards:selectedCards});
 }
 
-/* SOCKET EVENTS */
+/* ================= SOCKET ================= */
 
 socket.on("phase",(p)=>{
-  if(p==="picking") alert("🟢 PICK NOW (30s)");
-  if(p==="playing") alert("🎮 STARTED");
-  if(p==="waiting") document.getElementById("status").innerText="WAIT NEXT GAME";
+
+  if(p==="picking"){
+    alert("🟢 PICK YOUR CARTELAS (30s)");
+  }
+
+  if(p==="playing"){
+    alert("🎮 GAME STARTED");
+  }
+
+  if(p==="waiting"){
+    document.getElementById("status").innerText="WAIT FOR NEXT GAME";
+  }
 });
 
 socket.on("countdown",(t)=>{
@@ -108,9 +172,11 @@ socket.on("countdown",(t)=>{
 });
 
 socket.on("called",(nums)=>{
-  document.getElementById("called").innerText=nums.join(",");
+  document.getElementById("called").innerText =
+    "Called: " + nums.join(", ");
 });
 
+/* ================= MARK NUMBERS + VOICE ================= */
 socket.on("number",(n)=>{
 
   document.querySelectorAll(".cell").forEach(c=>{
@@ -129,11 +195,18 @@ socket.on("number",(n)=>{
   new Audio(`/voices/${letter}${n}.mp3`).play().catch(()=>{});
 });
 
+/* ================= WINNER ================= */
 socket.on("winner",(w)=>{
-  alert("🏆 "+w.telegramName+" WON");
-  console.log(w.numbers);
+
+  alert("🏆 WINNER: "+w.telegramName);
+
+  document.getElementById("called").innerText =
+    "🏆 WINNER: "+w.telegramName;
+
+  console.log("Winning numbers:", w.numbers);
 });
 
+/* ================= END ================= */
 socket.on("game_end",(m)=>{
   alert(m);
 });
