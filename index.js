@@ -73,23 +73,24 @@ io.on("connection",(socket)=>{
   });
 });
 
-/* ================= PICK PHASE (30s) ================= */
+/* ================= PICK PHASE ================= */
 function startPickPhase(){
 
   game.phase="picking";
-  game.called=[];
+  game.called=[]; // ✅ RESET NUMBERS
   game.selected={};
 
+  io.emit("reset"); // ✅ CLEAR FRONTEND
   io.emit("phase","picking");
 
   let t=30;
 
   let timer=setInterval(()=>{
 
-    t--;
     io.emit("countdown",t);
+    t--;
 
-    if(t<=0){
+    if(t<0){
       clearInterval(timer);
       startGame();
     }
@@ -160,14 +161,14 @@ function endGame(){
   io.emit("game_end","🏆 GOOD BINGO");
 
   setTimeout(()=>{
-    startPickPhase(); // auto restart
+    startPickPhase(); // ✅ AUTO RESTART 30s
   },5000);
 }
 
-/* ================= AUTO START ================= */
+/* ================= START ================= */
 setTimeout(startPickPhase,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL BINGO RUNNING");
+  console.log("🚀 FINAL BINGO FIXED RUNNING");
 });

@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Bingo</title>
+<title>Bingo Game</title>
 
 <style>
 body{
@@ -11,7 +11,15 @@ body{
   background:#f5f5f5;
 }
 
-#cards{
+h2{margin-top:10px}
+
+button{
+  padding:10px;
+  margin:5px;
+  cursor:pointer;
+}
+
+.cards{
   display:flex;
   flex-wrap:wrap;
   justify-content:center;
@@ -39,7 +47,7 @@ body{
 
 .cell{
   border:1px solid #000;
-  padding:5px;
+  padding:4px;
   font-size:12px;
 }
 
@@ -50,6 +58,11 @@ body{
 
 .selected{
   border:4px solid gold;
+}
+
+#called{
+  font-size:18px;
+  margin-top:10px;
 }
 </style>
 </head>
@@ -62,24 +75,36 @@ body{
 <h3 id="countdown"></h3>
 <h3 id="called"></h3>
 
+<button id="soundBtn">🔊 Enable Sound</button>
 <button onclick="loadCards()">Load 600 Cards</button>
 <button onclick="confirmCards()">Confirm Cartelas</button>
 
-<div id="cards"></div>
+<div id="cards" class="cards"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 
 const socket = io();
 
+/* ================= USER ================= */
 let phone = prompt("Enter phone");
 let telegramName = prompt("Enter telegram name");
 
 socket.emit("join",{phone,telegramName});
 
+/* ================= SOUND ================= */
+let audioEnabled = false;
+
+document.getElementById("soundBtn").onclick = () => {
+  audioEnabled = true;
+  new Audio("/voices/B1.mp3").play().catch(()=>{});
+  alert("✅ Sound Enabled");
+};
+
+/* ================= DATA ================= */
 let selectedCards = [];
 
-/* ================= GENERATE REAL 5x5 CARD ================= */
+/* ================= GENERATE CARD ================= */
 function generateCard(){
 
   function r(min,max){
@@ -113,7 +138,7 @@ function loadCards(){
 
   for(let i=1;i<=600;i++){
 
-    const card = generateCard();
+    const c = generateCard();
 
     html += `
     <div class="card" onclick="selectCard(this,${i})">
@@ -124,9 +149,8 @@ function loadCards(){
       </div>
 
       <div class="grid">
-        ${card.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
+        ${c.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
       </div>
-
     </div>`;
   }
 
@@ -152,6 +176,7 @@ function confirmCards(){
 
 /* ================= SOCKET ================= */
 
+/* PHASE */
 socket.on("phase",(p)=>{
 
   if(p==="picking"){
@@ -167,16 +192,18 @@ socket.on("phase",(p)=>{
   }
 });
 
+/* COUNTDOWN */
 socket.on("countdown",(t)=>{
   document.getElementById("countdown").innerText="Start in "+t;
 });
 
+/* CALLED NUMBERS */
 socket.on("called",(nums)=>{
   document.getElementById("called").innerText =
-    "Called: " + nums.join(", ");
+    "Called Numbers: " + nums.join(", ");
 });
 
-/* ================= MARK NUMBERS + VOICE ================= */
+/* NUMBER + VOICE + MARK */
 socket.on("number",(n)=>{
 
   document.querySelectorAll(".cell").forEach(c=>{
@@ -184,6 +211,8 @@ socket.on("number",(n)=>{
       c.classList.add("mark");
     }
   });
+
+  if(!audioEnabled) return;
 
   let letter="";
   if(n<=15) letter="B";
@@ -195,20 +224,39 @@ socket.on("number",(n)=>{
   new Audio(`/voices/${letter}${n}.mp3`).play().catch(()=>{});
 });
 
-/* ================= WINNER ================= */
+/* WINNER */
 socket.on("winner",(w)=>{
 
-  alert("🏆 WINNER: "+w.telegramName);
+  alert("🏆 WINNER: " + w.telegramName);
 
   document.getElementById("called").innerText =
-    "🏆 WINNER: "+w.telegramName;
+    "🏆 WINNER: " + w.telegramName;
 
-  console.log("Winning numbers:", w.numbers);
+  console.log("Winning Numbers:", w.numbers);
 });
 
-/* ================= END ================= */
+/* GAME END */
 socket.on("game_end",(m)=>{
   alert(m);
+});
+
+/* ================= RESET FIX ================= */
+socket.on("reset",()=>{
+
+  // clear called text
+  document.getElementById("called").innerText = "";
+
+  // remove marks
+  document.querySelectorAll(".cell").forEach(c=>{
+    c.classList.remove("mark");
+  });
+
+  // remove selections
+  document.querySelectorAll(".card").forEach(c=>{
+    c.classList.remove("selected");
+  });
+
+  selectedCards = [];
 });
 
 </script>
