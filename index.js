@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
+const mongoose = require("mongoose");
 
 const app = express();
 const server = http.createServer(app);
@@ -11,13 +12,24 @@ const io = new Server(server);
 app.use(express.static("public"));
 app.use(express.json());
 
+/* ================= DB ================= */
+mongoose.connect(process.env.MONGODB_URI)
+.then(()=>console.log("MongoDB connected"))
+.catch(console.log);
+
+/* ================= USER MODEL ================= */
+const User = mongoose.model("User", new mongoose.Schema({
+  phone:String,
+  telegramName:String
+}));
+
 /* ================= GAME STATE ================= */
 let game = {
-  phase: "waiting",
-  players: {},
-  selected: {},
-  called: [],
-  interval: null
+  phase:"waiting",
+  players:{},
+  selected:{},
+  called:[],
+  interval:null
 };
 
 /* ================= CARD ================= */
@@ -45,15 +57,23 @@ function generateCard(){
 /* ================= SOCKET ================= */
 io.on("connection",(socket)=>{
 
-  socket.on("join",(data)=>{
+  socket.on("join", async(data)=>{
+
+    // SAVE TELEGRAM NAME
+    await User.findOneAndUpdate(
+      {phone:data.phone},
+      {telegramName:data.telegramName},
+      {upsert:true}
+    );
+
+    const user = await User.findOne({phone:data.phone});
 
     game.players[data.phone]={
       socketId:socket.id,
       card:generateCard(),
-      telegramName:data.telegramName || data.phone
+      telegramName:user.telegramName
     };
 
-    socket.emit("card",game.players[data.phone].card);
     socket.emit("phase",game.phase);
     socket.emit("called",game.called);
   });
@@ -66,6 +86,7 @@ io.on("connection",(socket)=>{
 
     game.selected[data.phone]=game.players[data.phone];
   });
+
 });
 
 /* ================= PICK PHASE ================= */
@@ -81,7 +102,6 @@ function startPickPhase(){
   let t=30;
 
   let timer=setInterval(()=>{
-
     io.emit("countdown",t);
     t--;
 
@@ -89,7 +109,6 @@ function startPickPhase(){
       clearInterval(timer);
       startGame();
     }
-
   },1000);
 }
 
@@ -116,7 +135,7 @@ function startGame(){
   },2500);
 }
 
-/* ================= WIN CHECK ================= */
+/* ================= WIN LOGIC ================= */
 function isWinning(card){
 
   // rows
@@ -142,27 +161,26 @@ function isWinning(card){
   let d1=true, d2=true;
 
   for(let i=0;i<5;i++){
-    let n1=card[i][i];
-    let n2=card[i][4-i];
+    let a=card[i][i];
+    let b=card[i][4-i];
 
-    if(n1!=="FREE" && !game.called.includes(n1)) d1=false;
-    if(n2!=="FREE" && !game.called.includes(n2)) d2=false;
+    if(a!=="FREE" && !game.called.includes(a)) d1=false;
+    if(b!=="FREE" && !game.called.includes(b)) d2=false;
   }
 
   return d1 || d2;
 }
 
-/* ================= WINNER ================= */
+/* ================= CHECK WINNER ================= */
 function checkWinner(){
 
   for(let phone in game.selected){
 
-    const player=game.selected[phone];
+    const player = game.selected[phone];
 
     if(isWinning(player.card)){
 
       io.emit("winner",{
-        phone,
         telegramName:player.telegramName,
         card:player.card
       });
@@ -183,7 +201,7 @@ function endGame(){
 
   setTimeout(()=>{
     startPickPhase();
-  },30000);
+  },30000); // 30 sec restart
 }
 
 /* ================= START ================= */
@@ -191,5 +209,5 @@ setTimeout(startPickPhase,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL BINGO WITH TELEGRAM WINNER");
+  console.log("🚀 FINAL AUTO BINGO WITH MONGODB");
 });

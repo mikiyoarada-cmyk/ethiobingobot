@@ -13,8 +13,6 @@ body{text-align:center;font-family:Arial;background:#f5f5f5}
 .grid{display:grid;grid-template-columns:repeat(5,1fr)}
 .cell{border:1px solid #000;padding:4px;font-size:12px}
 .mark{background:green;color:white}
-#status{font-size:18px;margin:10px}
-#winnerCard{margin-top:20px}
 </style>
 </head>
 
@@ -22,13 +20,12 @@ body{text-align:center;font-family:Arial;background:#f5f5f5}
 
 <h2>🎯 BINGO GAME</h2>
 
-<div id="status"></div>
-
-<button id="soundBtn">🔊 Enable Sound</button>
-<button id="loadBtn">Load 600 Cards</button>
-<button id="confirmBtn">Confirm Cartelas</button>
-
+<h3 id="status"></h3>
 <h3 id="called"></h3>
+
+<button id="soundBtn">🔊 Sound</button>
+<button id="loadBtn">Load 600 Cards</button>
+<button id="confirmBtn">Confirm</button>
 
 <div id="cards" class="cards"></div>
 
@@ -41,26 +38,25 @@ body{text-align:center;font-family:Arial;background:#f5f5f5}
 const socket = io();
 
 let audioEnabled=false;
-let selectedCards=new Set();
+let selected=new Set();
 let allCards=[];
-let myPhone=prompt("Enter phone:");
-let telegramName=prompt("Enter Telegram name:");
+
+let phone=prompt("Phone:");
+let telegramName=prompt("Telegram Name:");
 
 /* SOUND */
 document.getElementById("soundBtn").onclick=()=>{
   audioEnabled=true;
-  new Audio("/voices/B1.mp3").play().catch(()=>{});
 };
 
-function playVoice(num){
+function playVoice(n){
   if(!audioEnabled) return;
-
-  let l = num<=15?"B":num<=30?"I":num<=45?"N":num<=60?"G":"O";
-  new Audio(`/voices/${l}${num}.mp3`).play().catch(()=>{});
+  let l=n<=15?"B":n<=30?"I":n<=45?"N":n<=60?"G":"O";
+  new Audio(`/voices/${l}${n}.mp3`).play().catch(()=>{});
 }
 
 /* CARD */
-function unique(min,max){
+function r(min,max){
   let a=[];
   while(a.length<5){
     let n=Math.floor(Math.random()*(max-min+1))+min;
@@ -69,8 +65,8 @@ function unique(min,max){
   return a.sort((a,b)=>a-b);
 }
 
-function createCard(){
-  const B=unique(1,15),I=unique(16,30),N=unique(31,45),G=unique(46,60),O=unique(61,75);
+function create(){
+  const B=r(1,15),I=r(16,30),N=r(31,45),G=r(46,60),O=r(61,75);
   return [
     [B[0],I[0],N[0],G[0],O[0]],
     [B[1],I[1],N[1],G[1],O[1]],
@@ -86,11 +82,11 @@ document.getElementById("loadBtn").onclick=()=>{
   allCards=[];
 
   for(let i=0;i<600;i++){
-    let c=createCard();
+    let c=create();
     allCards.push(c);
 
     html+=`
-    <div class="card" onclick="toggleCard(${i})" id="card${i}">
+    <div class="card" onclick="pick(${i})" id="c${i}">
       <b>Card ${i+1}</b>
       <div class="header"><div>B</div><div>I</div><div>N</div><div>G</div><div>O</div></div>
       <div class="grid">${c.flat().map(n=>`<div class="cell">${n}</div>`).join("")}</div>
@@ -100,41 +96,42 @@ document.getElementById("loadBtn").onclick=()=>{
   document.getElementById("cards").innerHTML=html;
 };
 
-/* SELECT */
-function toggleCard(i){
-  let el=document.getElementById("card"+i);
-  if(selectedCards.has(i)){
-    selectedCards.delete(i);
+/* PICK */
+function pick(i){
+  let el=document.getElementById("c"+i);
+
+  if(selected.has(i)){
+    selected.delete(i);
     el.classList.remove("selected");
   }else{
-    selectedCards.add(i);
+    selected.add(i);
     el.classList.add("selected");
   }
 }
 
 /* CONFIRM */
 document.getElementById("confirmBtn").onclick=()=>{
-  socket.emit("select_cartelas",{phone:myPhone});
+  socket.emit("select_cartelas",{phone});
 };
 
 /* JOIN */
-socket.emit("join",{phone:myPhone,telegramName});
+socket.emit("join",{phone,telegramName});
 
 /* SOCKET */
 socket.on("phase",(p)=>{
-  if(p==="picking") document.getElementById("status").innerText="🟢 PICK (30s)";
-  if(p==="playing") document.getElementById("status").innerText="🎮 PLAYING";
-  if(p==="waiting") document.getElementById("status").innerText="WAIT NEXT";
+  if(p==="picking") status.innerText="🟢 PICK NOW (30s)";
+  if(p==="playing") status.innerText="🎮 GAME STARTED";
+  if(p==="waiting") status.innerText="WAIT NEXT GAME";
 });
 
 socket.on("countdown",(t)=>{
-  document.getElementById("status").innerText="Start in "+t;
+  status.innerText="Start in "+t;
 });
 
 socket.on("number",(n)=>playVoice(n));
 
 socket.on("called",(nums)=>{
-  document.getElementById("called").innerText=nums.join(", ");
+  called.innerText=nums.join(", ");
 
   document.querySelectorAll(".cell").forEach(c=>{
     c.classList.remove("mark");
@@ -144,11 +141,10 @@ socket.on("called",(nums)=>{
   });
 });
 
-/* WINNER SHOW FULL CARD */
+/* WINNER */
 socket.on("winner",(w)=>{
 
-  document.getElementById("winner").innerText=
-    "🏆 WINNER: "+w.telegramName;
+  winner.innerText="🏆 "+w.telegramName+" WON!";
 
   let html=`
   <div class="card">
@@ -164,6 +160,8 @@ socket.on("winner",(w)=>{
 socket.on("game_end",(m)=>{
   alert(m);
 });
+
+socket.on("msg",(m)=>alert(m));
 
 </script>
 
