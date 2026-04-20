@@ -17,12 +17,6 @@ mongoose.connect(process.env.MONGODB_URI)
 .then(()=>console.log("MongoDB connected"))
 .catch(console.log);
 
-/* ================= USER MODEL ================= */
-const User = mongoose.model("User", new mongoose.Schema({
-  phone:String,
-  telegramName:String
-}));
-
 /* ================= GAME STATE ================= */
 let game = {
   phase:"waiting",
@@ -54,28 +48,52 @@ function generateCard(){
   ];
 }
 
+/* ================= WIN CHECK ================= */
+function isWinner(card){
+
+  // rows
+  for(let r=0;r<5;r++){
+    if(card[r].every(n=>n==="FREE" || game.called.includes(n))) return true;
+  }
+
+  // columns
+  for(let c=0;c<5;c++){
+    let win=true;
+    for(let r=0;r<5;r++){
+      let n=card[r][c];
+      if(n!=="FREE" && !game.called.includes(n)) win=false;
+    }
+    if(win) return true;
+  }
+
+  // diagonal 1
+  if([0,1,2,3,4].every(i=>{
+    let n=card[i][i];
+    return n==="FREE" || game.called.includes(n);
+  })) return true;
+
+  // diagonal 2
+  if([0,1,2,3,4].every(i=>{
+    let n=card[i][4-i];
+    return n==="FREE" || game.called.includes(n);
+  })) return true;
+
+  return false;
+}
+
 /* ================= SOCKET ================= */
 io.on("connection",(socket)=>{
 
-  socket.on("join", async(data)=>{
-
-    // SAVE TELEGRAM NAME
-    await User.findOneAndUpdate(
-      {phone:data.phone},
-      {telegramName:data.telegramName},
-      {upsert:true}
-    );
-
-    const user = await User.findOne({phone:data.phone});
+  socket.on("join",(data)=>{
 
     game.players[data.phone]={
       socketId:socket.id,
-      card:generateCard(),
-      telegramName:user.telegramName
+      telegramName:data.telegramName,
+      cards:[...Array(600)].map(()=>generateCard())
     };
 
+    socket.emit("cards",game.players[data.phone].cards);
     socket.emit("phase",game.phase);
-    socket.emit("called",game.called);
   });
 
   socket.on("select_cartelas",(data)=>{
@@ -84,9 +102,11 @@ io.on("connection",(socket)=>{
       return socket.emit("msg","WAIT FOR NEXT GAME");
     }
 
-    game.selected[data.phone]=game.players[data.phone];
+    game.selected[data.phone]={
+      ...game.players[data.phone],
+      chosen:data.cards
+    };
   });
-
 });
 
 /* ================= PICK PHASE ================= */
@@ -97,15 +117,15 @@ function startPickPhase(){
   game.selected={};
 
   io.emit("phase","picking");
-  io.emit("called",[]);
+  io.emit("called",[]); // clear UI
 
   let t=30;
 
   let timer=setInterval(()=>{
-    io.emit("countdown",t);
     t--;
+    io.emit("countdown",t);
 
-    if(t<0){
+    if(t<=0){
       clearInterval(timer);
       startGame();
     }
@@ -132,62 +152,29 @@ function startGame(){
 
     checkWinner();
 
-  },2500);
+  },3000);
 }
 
-/* ================= WIN LOGIC ================= */
-function isWinning(card){
-
-  // rows
-  for(let r=0;r<5;r++){
-    if(card[r].every(n => n==="FREE" || game.called.includes(n))){
-      return true;
-    }
-  }
-
-  // columns
-  for(let c=0;c<5;c++){
-    let win=true;
-    for(let r=0;r<5;r++){
-      let n=card[r][c];
-      if(n!=="FREE" && !game.called.includes(n)){
-        win=false;
-      }
-    }
-    if(win) return true;
-  }
-
-  // diagonals
-  let d1=true, d2=true;
-
-  for(let i=0;i<5;i++){
-    let a=card[i][i];
-    let b=card[i][4-i];
-
-    if(a!=="FREE" && !game.called.includes(a)) d1=false;
-    if(b!=="FREE" && !game.called.includes(b)) d2=false;
-  }
-
-  return d1 || d2;
-}
-
-/* ================= CHECK WINNER ================= */
+/* ================= WINNER ================= */
 function checkWinner(){
 
   for(let phone in game.selected){
 
-    const player = game.selected[phone];
+    const player=game.selected[phone];
 
-    if(isWinning(player.card)){
+    for(let card of player.chosen){
 
-      io.emit("winner",{
-        telegramName:player.telegramName,
-        card:player.card
-      });
+      if(isWinner(card)){
 
-      clearInterval(game.interval);
-      endGame();
-      return;
+        io.emit("winner",{
+          telegramName:player.telegramName,
+          card
+        });
+
+        clearInterval(game.interval);
+        endGame();
+        return;
+      }
     }
   }
 }
@@ -199,9 +186,7 @@ function endGame(){
 
   io.emit("game_end","🏆 GOOD BINGO");
 
-  setTimeout(()=>{
-    startPickPhase();
-  },30000); // 30 sec restart
+  setTimeout(startPickPhase,30000); // NEXT GAME AUTO 30s
 }
 
 /* ================= START ================= */
@@ -209,5 +194,5 @@ setTimeout(startPickPhase,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL AUTO BINGO WITH MONGODB");
+  console.log("🚀 FINAL PERFECT BINGO RUNNING");
 });
