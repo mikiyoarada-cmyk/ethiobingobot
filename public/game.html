@@ -34,7 +34,6 @@ const socket = io();
 
 let myCards=[];
 let selected=[];
-
 let audioEnabled=false;
 
 function enableSound(){
@@ -42,13 +41,12 @@ function enableSound(){
   new Audio("/voices/B1.mp3").play().catch(()=>{});
 }
 
-/* ================= JOIN ================= */
 let phone=prompt("Enter Phone");
 let name=prompt("Enter Telegram Name");
 
 socket.emit("join",{phone,telegramName:name});
 
-/* ================= LOAD CARDS ================= */
+/* ================= LOAD ================= */
 socket.on("cards",(cards)=>{
 
   myCards=cards;
@@ -56,11 +54,12 @@ socket.on("cards",(cards)=>{
   let html="";
 
   cards.forEach((c,i)=>{
-
     html+=`
     <div class="card" onclick="pick(${i},this)">
       <b>Card ${i+1}</b>
-      <div class="header"><div>B</div><div>I</div><div>N</div><div>G</div><div>O</div></div>
+      <div class="header">
+        <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
+      </div>
       <div class="grid">
         ${c.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
       </div>
@@ -93,7 +92,7 @@ function confirmPick(){
 socket.on("phase",(p)=>{
 
   if(p==="picking"){
-    document.getElementById("status").innerText="🟢 PICK CARTELAS (30s)";
+    document.getElementById("status").innerText="🟢 PICK NOW (30s)";
   }
 
   if(p==="playing"){
@@ -105,6 +104,11 @@ socket.on("phase",(p)=>{
   }
 });
 
+/* ================= SHOW MSG ================= */
+socket.on("msg",(m)=>{
+  alert(m); // 🔴 THIS FIXES YOUR PROBLEM
+});
+
 /* ================= COUNTDOWN ================= */
 socket.on("countdown",(t)=>{
   document.getElementById("status").innerText="Start in "+t;
@@ -112,7 +116,6 @@ socket.on("countdown",(t)=>{
 
 /* ================= NUMBER ================= */
 socket.on("number",(n)=>{
-
   if(audioEnabled){
     let letter = n<=15?"B":n<=30?"I":n<=45?"N":n<=60?"G":"O";
     new Audio(`/voices/${letter}${n}.mp3`).play().catch(()=>{});
@@ -136,9 +139,7 @@ socket.on("called",(arr)=>{
 
 /* ================= WINNER ================= */
 socket.on("winner",(w)=>{
-
   alert("🏆 WINNER: "+w.telegramName);
-
   console.log("Winning Card:",w.card);
 });
 
