@@ -74,8 +74,10 @@ io.on("connection",(socket)=>{
   });
 });
 
-/* ================= PICK PHASE ================= */
+/* ================= PICK PHASE (AUTO 30s) ================= */
 function startPickPhase(){
+
+  console.log("🟢 PICK PHASE");
 
   game.phase="picking";
   game.called=[];
@@ -103,6 +105,8 @@ function startPickPhase(){
 /* ================= GAME ================= */
 function startGame(){
 
+  console.log("🎮 GAME STARTED");
+
   game.phase="playing";
   io.emit("phase","playing");
 
@@ -128,7 +132,7 @@ function startGame(){
   },2500);
 }
 
-/* ================= WINNER (REAL BINGO) ================= */
+/* ================= WINNER ================= */
 function checkWinner(){
 
   for(let phone in game.selected){
@@ -144,27 +148,22 @@ function checkWinner(){
     let win = false;
 
     // ROWS
-    for(let r=0; r<5; r++){
+    for(let r=0;r<5;r++){
       if(c[r].every(isMarked)) win = true;
     }
 
     // COLUMNS
-    for(let col=0; col<5; col++){
-      let colWin = true;
-      for(let r=0; r<5; r++){
-        if(!isMarked(c[r][col])){
-          colWin = false;
-          break;
-        }
+    for(let col=0;col<5;col++){
+      let ok=true;
+      for(let r=0;r<5;r++){
+        if(!isMarked(c[r][col])) ok=false;
       }
-      if(colWin) win = true;
+      if(ok) win=true;
     }
 
-    // DIAGONAL 1
-    if([0,1,2,3,4].every(i => isMarked(c[i][i]))) win = true;
-
-    // DIAGONAL 2
-    if([0,1,2,3,4].every(i => isMarked(c[i][4-i]))) win = true;
+    // DIAGONALS
+    if([0,1,2,3,4].every(i=>isMarked(c[i][i]))) win=true;
+    if([0,1,2,3,4].every(i=>isMarked(c[i][4-i]))) win=true;
 
     if(win && !game.winnerFound){
 
@@ -186,19 +185,24 @@ function checkWinner(){
 /* ================= END ================= */
 function endGame(){
 
+  console.log("🏁 GAME END");
+
   game.phase="waiting";
 
   io.emit("game_end","🏆 GOOD BINGO");
 
+  // 🔥 AUTO RESTART AFTER 30 SEC
   setTimeout(()=>{
     startPickPhase();
-  },30000); // 30 sec next round
+  },30000);
 }
 
-/* ================= AUTO START ================= */
-setTimeout(startPickPhase,3000);
+/* ================= AUTO LOOP ================= */
+setTimeout(()=>{
+  startPickPhase(); // start automatically when server runs
+},3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL AUTO BINGO SYSTEM READY");
+  console.log("🚀 AUTO BINGO SYSTEM RUNNING");
 });
