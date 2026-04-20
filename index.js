@@ -50,7 +50,7 @@ io.on("connection",(socket)=>{
     game.players[data.phone]={
       socketId:socket.id,
       card:generateCard(),
-      telegramName:data.telegramName
+      telegramName:data.telegramName || data.phone
     };
 
     socket.emit("card",game.players[data.phone].card);
@@ -72,11 +72,11 @@ io.on("connection",(socket)=>{
 function startPickPhase(){
 
   game.phase="picking";
-  game.called=[]; // ✅ CLEAR NUMBERS
+  game.called=[];
   game.selected={};
 
   io.emit("phase","picking");
-  io.emit("called",[]); // ✅ CLEAR UI
+  io.emit("called",[]);
 
   let t=30;
 
@@ -116,7 +116,7 @@ function startGame(){
   },2500);
 }
 
-/* ================= WIN LOGIC (FIXED) ================= */
+/* ================= WIN CHECK ================= */
 function isWinning(card){
 
   // rows
@@ -138,24 +138,21 @@ function isWinning(card){
     if(win) return true;
   }
 
-  // diagonal 1
-  let d1=true;
-  for(let i=0;i<5;i++){
-    let n=card[i][i];
-    if(n!=="FREE" && !game.called.includes(n)) d1=false;
-  }
+  // diagonals
+  let d1=true, d2=true;
 
-  // diagonal 2
-  let d2=true;
   for(let i=0;i<5;i++){
-    let n=card[i][4-i];
-    if(n!=="FREE" && !game.called.includes(n)) d2=false;
+    let n1=card[i][i];
+    let n2=card[i][4-i];
+
+    if(n1!=="FREE" && !game.called.includes(n1)) d1=false;
+    if(n2!=="FREE" && !game.called.includes(n2)) d2=false;
   }
 
   return d1 || d2;
 }
 
-/* ================= CHECK WINNER ================= */
+/* ================= WINNER ================= */
 function checkWinner(){
 
   for(let phone in game.selected){
@@ -167,7 +164,7 @@ function checkWinner(){
       io.emit("winner",{
         phone,
         telegramName:player.telegramName,
-        numbers:player.card.flat()
+        card:player.card
       });
 
       clearInterval(game.interval);
@@ -177,7 +174,7 @@ function checkWinner(){
   }
 }
 
-/* ================= END GAME ================= */
+/* ================= END ================= */
 function endGame(){
 
   game.phase="waiting";
@@ -185,8 +182,8 @@ function endGame(){
   io.emit("game_end","🏆 GOOD BINGO");
 
   setTimeout(()=>{
-    startPickPhase(); // ✅ AUTO RESTART
-  },30000); // ✅ 30 sec next round
+    startPickPhase();
+  },30000);
 }
 
 /* ================= START ================= */
@@ -194,5 +191,5 @@ setTimeout(startPickPhase,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL BINGO FIXED RUNNING");
+  console.log("🚀 FINAL BINGO WITH TELEGRAM WINNER");
 });
