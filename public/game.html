@@ -52,10 +52,6 @@ body{
   border:4px solid gold;
 }
 
-#called{
-  font-size:18px;
-  margin-top:10px;
-}
 </style>
 </head>
 
@@ -90,14 +86,13 @@ let audioEnabled = false;
 document.getElementById("soundBtn").onclick = () => {
   audioEnabled = true;
   new Audio("/voices/B1.mp3").play().catch(()=>{});
-  alert("✅ Sound Enabled");
 };
 
 /* ================= STATE ================= */
 let selectedCards = [];
 let currentPhase = "waiting";
 
-/* ================= CARD GENERATOR ================= */
+/* ================= CARD ================= */
 function generateCard(){
 
   function r(min,max){
@@ -124,7 +119,7 @@ function generateCard(){
   ];
 }
 
-/* ================= LOAD CARDS ================= */
+/* ================= LOAD ================= */
 function loadCards(){
 
   let html="";
@@ -154,7 +149,7 @@ function loadCards(){
 function selectCard(el,i){
 
   if(currentPhase !== "picking"){
-    alert("⛔ Please wait for next game");
+    alert("⛔ Wait for next game");
     return;
   }
 
@@ -181,15 +176,14 @@ function confirmCards(){
 /* ================= SOCKET ================= */
 
 socket.on("phase",(p)=>{
-
   currentPhase = p;
 
   if(p==="picking"){
-    alert("🟢 PICK YOUR CARTELAS (30s)");
+    document.getElementById("status").innerText="🟢 PICK YOUR CARDS";
   }
 
   if(p==="playing"){
-   
+    document.getElementById("status").innerText="🎮 GAME STARTED";
   }
 
   if(p==="waiting"){
@@ -201,57 +195,62 @@ socket.on("countdown",(t)=>{
   document.getElementById("countdown").innerText="Start in "+t;
 });
 
-socket.on("called",(nums)=>{
-  document.getElementById("called").innerText =
-    "Called Numbers: " + nums.join(", ");
+/* ✅ CLEAR CALLED NUMBERS PROPERLY */
+socket.on("reset",()=>{
+
+  // clear text
+  document.getElementById("called").innerText = "";
+
+  // remove green marks
+  document.querySelectorAll(".cell").forEach(c=>{
+    c.classList.remove("mark");
+  });
+
+  // remove selected borders
+  document.querySelectorAll(".card").forEach(c=>{
+    c.classList.remove("selected");
+  });
+
+  selectedCards = [];
 });
 
-/* NUMBER + VOICE + MARK */
+/* ================= NUMBER ================= */
 socket.on("number",(n)=>{
 
+  // mark UI
   document.querySelectorAll(".cell").forEach(c=>{
     if(Number(c.innerText)===n){
       c.classList.add("mark");
     }
   });
 
-  if(!audioEnabled) return;
+  // voice
+  if(audioEnabled){
+    let letter="";
+    if(n<=15) letter="B";
+    else if(n<=30) letter="I";
+    else if(n<=45) letter="N";
+    else if(n<=60) letter="G";
+    else letter="O";
 
-  let letter="";
-  if(n<=15) letter="B";
-  else if(n<=30) letter="I";
-  else if(n<=45) letter="N";
-  else if(n<=60) letter="G";
-  else letter="O";
-
-  new Audio(`/voices/${letter}${n}.mp3`).play().catch(()=>{});
+    new Audio(`/voices/${letter}${n}.mp3`).play().catch(()=>{});
+  }
 });
 
-/* WINNER */
+/* ================= CALLED LIST ================= */
+socket.on("called",(nums)=>{
+  document.getElementById("called").innerText =
+    "Called Numbers: " + nums.join(", ");
+});
+
+/* ================= WINNER ================= */
 socket.on("winner",(w)=>{
   alert("🏆 WINNER: " + w.telegramName);
-  console.log("Winning Numbers:", w.numbers);
 });
 
-/* GAME END */
+/* ================= END ================= */
 socket.on("game_end",(m)=>{
   alert(m);
-});
-
-/* RESET */
-socket.on("reset",()=>{
-
-  document.getElementById("called").innerText = "";
-
-  document.querySelectorAll(".cell").forEach(c=>{
-    c.classList.remove("mark");
-  });
-
-  document.querySelectorAll(".card").forEach(c=>{
-    c.classList.remove("selected");
-  });
-
-  selectedCards = [];
 });
 
 </script>
