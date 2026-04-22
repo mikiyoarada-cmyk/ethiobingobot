@@ -47,14 +47,12 @@ function generateCard(){
   ];
 }
 
-/* ================= ONE LINE WIN (FIXED) ================= */
+/* ================= ONE LINE WIN ================= */
 function isWinner(card){
 
   // rows
   for(let r=0;r<5;r++){
-    if(card[r].every(n=>n==="FREE" || game.called.includes(n))){
-      return true;
-    }
+    if(card[r].every(n=>n==="FREE" || game.called.includes(n))) return true;
   }
 
   // columns
@@ -62,21 +60,17 @@ function isWinner(card){
     let win=true;
     for(let r=0;r<5;r++){
       let n=card[r][c];
-      if(n!=="FREE" && !game.called.includes(n)){
-        win=false;
-        break;
-      }
+      if(n!=="FREE" && !game.called.includes(n)) win=false;
     }
     if(win) return true;
   }
 
-  // diagonal \
+  // diagonals
   if([0,1,2,3,4].every(i=>{
     let n=card[i][i];
     return n==="FREE" || game.called.includes(n);
   })) return true;
 
-  // diagonal /
   if([0,1,2,3,4].every(i=>{
     let n=card[i][4-i];
     return n==="FREE" || game.called.includes(n);
@@ -102,7 +96,6 @@ io.on("connection",(socket)=>{
 
   socket.on("select_cartelas",(data)=>{
 
-    // 🔴 FIX: BLOCK DURING GAME
     if(game.phase!=="picking"){
       return socket.emit("msg","WAIT FOR NEXT GAME");
     }
@@ -114,7 +107,7 @@ io.on("connection",(socket)=>{
   });
 });
 
-/* ================= PICK PHASE ================= */
+/* ================= PICK ================= */
 function startPickPhase(){
 
   game.phase="picking";
@@ -122,7 +115,7 @@ function startPickPhase(){
   game.selected={};
 
   io.emit("phase","picking");
-  io.emit("called",[]); // clear numbers
+  io.emit("called",[]);
 
   let t=30;
 
@@ -134,7 +127,6 @@ function startPickPhase(){
       clearInterval(timer);
       startGame();
     }
-
   },1000);
 }
 
@@ -172,14 +164,15 @@ function checkWinner(){
 
       if(isWinner(card)){
 
+        clearInterval(game.interval);
+
         io.emit("winner",{
           telegramName:player.telegramName,
           card
         });
 
-        clearInterval(game.interval);
         endGame();
-        return; // stop after first winner
+        return;
       }
     }
   }
@@ -189,9 +182,10 @@ function checkWinner(){
 function endGame(){
 
   game.phase="waiting";
+
   io.emit("game_end","🏆 GOOD BINGO");
 
-  setTimeout(startPickPhase,30000); // auto restart 30s
+  setTimeout(startPickPhase,30000); // auto next game
 }
 
 /* ================= AUTO START ================= */
@@ -199,5 +193,5 @@ setTimeout(startPickPhase,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL BINGO FIXED RUNNING");
+  console.log("🚀 FINAL AUTO BINGO READY");
 });
