@@ -2,58 +2,69 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Bingo</title>
+<title>Bingo Game</title>
 
 <style>
-body{text-align:center;font-family:Arial;background:#f5f5f5}
+body{font-family:Arial;text-align:center;background:#f5f5f5}
 .cards{display:flex;flex-wrap:wrap;justify-content:center}
-.card{border:2px solid #000;margin:5px;padding:5px;width:150px;background:#fff;cursor:pointer}
-.selected{border:3px solid green}
-.header{display:grid;grid-template-columns:repeat(5,1fr);background:#ddd}
+.card{border:2px solid #000;margin:5px;padding:5px;width:150px;background:#fff}
+.header{display:grid;grid-template-columns:repeat(5,1fr);background:#ddd;font-weight:bold}
 .grid{display:grid;grid-template-columns:repeat(5,1fr)}
 .cell{border:1px solid #000;padding:4px}
 .mark{background:green;color:#fff}
+.selected{border:3px solid orange}
+#winnerBox{
+  background:#fff;
+  border:3px solid green;
+  padding:10px;
+  margin:10px;
+}
 </style>
 </head>
 
 <body>
 
-<h2>BINGO</h2>
+<h2>🎯 BINGO GAME</h2>
 <h3 id="status"></h3>
 <h3 id="called"></h3>
 
-<div id="cards" class="cards"></div>
+<div id="winnerBox"></div>
 
 <button onclick="enableSound()">🔊 Enable Sound</button>
+<button onclick="confirmPick()">Confirm Cartelas</button>
+
+<div id="cards" class="cards"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 
-const socket=io();
+const socket = io();
 
-let phone=prompt("Phone");
-let name=prompt("Telegram name");
-
+let myCards=[];
 let selected=[];
 let audioEnabled=false;
 
-socket.emit("join",{phone,telegramName:name});
-
-/* SOUND */
 function enableSound(){
   audioEnabled=true;
   new Audio("/voices/B1.mp3").play().catch(()=>{});
 }
 
-/* LOAD */
+let phone=prompt("Enter Phone");
+let name=prompt("Enter Telegram Name");
+
+socket.emit("join",{phone,telegramName:name});
+
+/* ================= LOAD ================= */
 socket.on("cards",(cards)=>{
+
+  myCards=cards;
 
   let html="";
 
   cards.forEach((c,i)=>{
-
     html+=`
-    <div class="card" onclick="pick(${i})" id="c${i}">
+    <div class="card" onclick="pick(${i},this)">
+      <b>Card ${i+1}</b>
       <div class="header">
         <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
       </div>
@@ -64,34 +75,37 @@ socket.on("cards",(cards)=>{
   });
 
   document.getElementById("cards").innerHTML=html;
-  window.allCards=cards;
 });
 
-/* PICK */
-function pick(i){
+/* ================= PICK ================= */
+function pick(i,el){
 
   if(selected.includes(i)){
     selected=selected.filter(x=>x!==i);
-    document.getElementById("c"+i).classList.remove("selected");
+    el.classList.remove("selected");
   }else{
     selected.push(i);
-    document.getElementById("c"+i).classList.add("selected");
+    el.classList.add("selected");
   }
 }
 
-/* PHASE */
+function confirmPick(){
+  socket.emit("select_cartelas",{
+    phone,
+    cards:selected.map(i=>myCards[i])
+  });
+}
+
+/* ================= PHASE ================= */
 socket.on("phase",(p)=>{
 
   if(p==="picking"){
-    document.getElementById("status").innerText="PICK NOW (30s)";
-    socket.emit("select_cartelas",{
-      phone,
-      cards:selected.map(i=>allCards[i])
-    });
+    document.getElementById("status").innerText="🟢 PICK NOW (30s)";
+    document.getElementById("winnerBox").innerHTML="";
   }
 
   if(p==="playing"){
-    document.getElementById("status").innerText="GAME STARTED";
+    document.getElementById("status").innerText="🎮 GAME STARTED";
   }
 
   if(p==="waiting"){
@@ -99,42 +113,62 @@ socket.on("phase",(p)=>{
   }
 });
 
-/* BLOCK MESSAGE */
-socket.on("msg",(m)=>alert(m));
+/* ================= MSG ================= */
+socket.on("msg",(m)=>{
+  alert(m);
+});
 
-/* COUNTDOWN */
+/* ================= COUNTDOWN ================= */
 socket.on("countdown",(t)=>{
   document.getElementById("status").innerText="Start in "+t;
 });
 
-/* VOICE FIXED */
+/* ================= NUMBER ================= */
 socket.on("number",(n)=>{
-  if(!audioEnabled) return;
-
-  let letter = n<=15?"B":n<=30?"I":n<=45?"N":n<=60?"G":"O";
-  new Audio(`/voices/${letter}${n}.mp3`).play().catch(()=>{});
+  if(audioEnabled){
+    let letter = n<=15?"B":n<=30?"I":n<=45?"N":n<=60?"G":"O";
+    new Audio(`/voices/${letter}${n}.mp3`).play().catch(()=>{});
+  }
 });
 
-/* CALLED */
+/* ================= CALLED ================= */
 socket.on("called",(arr)=>{
 
-  document.getElementById("called").innerText="Called: "+arr.join(",");
+  document.getElementById("called").innerText=
+    "Called: "+arr.join(",");
 
   document.querySelectorAll(".cell").forEach(c=>{
     if(arr.includes(Number(c.innerText))){
       c.classList.add("mark");
+    }else{
+      c.classList.remove("mark");
     }
   });
 });
 
-/* WINNER */
+/* ================= WINNER ================= */
 socket.on("winner",(w)=>{
-  alert("🏆 "+w.telegramName+" WON");
+
+  let html = `
+  <h2>🏆 WINNER: ${w.telegramName}</h2>
+  <h3>GOOD BINGO</h3>
+  <div class="card">
+    <div class="header">
+      <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
+    </div>
+    <div class="grid">
+      ${w.card.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
+    </div>
+  </div>
+  `;
+
+  document.getElementById("winnerBox").innerHTML = html;
 });
 
-/* END */
+/* ================= END ================= */
 socket.on("game_end",(m)=>{
-  document.getElementById("status").innerText=m;
+  document.getElementById("status").innerText = m;
+  selected=[];
 });
 
 </script>
