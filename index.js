@@ -47,7 +47,7 @@ function generateCard(){
   ];
 }
 
-/* ================= ONE LINE WIN ================= */
+/* ================= WIN CHECK (ONE LINE) ================= */
 function isWinner(card){
 
   // rows
@@ -107,8 +107,19 @@ io.on("connection",(socket)=>{
   });
 });
 
-/* ================= PICK ================= */
+/* ================= PICK PHASE ================= */
 function startPickPhase(){
+
+  const playerCount = Object.keys(game.players).length;
+
+  // 🔴 REQUIRE MIN 2 PLAYERS
+  if(playerCount < 2){
+    io.emit("phase","waiting");
+    console.log("Waiting for players...");
+
+    setTimeout(startPickPhase,5000); // check again
+    return;
+  }
 
   game.phase="picking";
   game.called=[];
@@ -185,7 +196,7 @@ function endGame(){
 
   io.emit("game_end","🏆 GOOD BINGO");
 
-  setTimeout(startPickPhase,30000); // auto next game
+  setTimeout(startPickPhase,30000);
 }
 
 /* ================= AUTO START ================= */
@@ -193,5 +204,5 @@ setTimeout(startPickPhase,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL AUTO BINGO READY");
+  console.log("🚀 FINAL BINGO WITH PLAYER LIMIT READY");
 });
