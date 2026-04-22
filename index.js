@@ -22,6 +22,7 @@ let game = {
   players:{},
   selected:{},
   called:[],
+  usedCards: new Set(),
   interval:null
 };
 
@@ -47,6 +48,11 @@ function generateCard(){
   ];
 }
 
+/* ================= UNIQUE CARD STRING ================= */
+function cardKey(card){
+  return card.flat().join("-");
+}
+
 /* ================= WIN CHECK ================= */
 function isWinner(card){
 
@@ -57,12 +63,12 @@ function isWinner(card){
 
   // columns
   for(let c=0;c<5;c++){
-    let win=true;
+    let ok=true;
     for(let r=0;r<5;r++){
       let n=card[r][c];
-      if(n!=="FREE" && !game.called.includes(n)) win=false;
+      if(n!=="FREE" && !game.called.includes(n)) ok=false;
     }
-    if(win) return true;
+    if(ok) return true;
   }
 
   // diagonals
@@ -84,25 +90,44 @@ io.on("connection",(socket)=>{
 
   socket.on("join",(data)=>{
 
-    // 🔥 ONLY 1 CARD PER PLAYER
+    // ❌ BLOCK JOIN DURING GAME
+    if(game.phase==="playing"){
+      return socket.emit("msg","WAIT FOR NEXT GAME");
+    }
+
+    // create 600 UNIQUE cards pool
+    let cards=[];
+    while(cards.length<600){
+      let c=generateCard();
+      let key=cardKey(c);
+
+      if(!game.usedCards.has(key)){
+        game.usedCards.add(key);
+        cards.push(c);
+      }
+    }
+
     game.players[data.phone]={
       socketId:socket.id,
       telegramName:data.telegramName,
-      card:generateCard()
+      cards
     };
 
-    socket.emit("card",game.players[data.phone].card);
+    socket.emit("cards",cards);
     socket.emit("phase",game.phase);
   });
 
-  socket.on("select_cartela",(data)=>{
+  socket.on("select_cartelas",(data)=>{
 
-    // 🔴 BLOCK AFTER START
+    // ❌ BLOCK AFTER START
     if(game.phase!=="picking"){
       return socket.emit("msg","WAIT FOR NEXT GAME");
     }
 
-    game.selected[data.phone]=game.players[data.phone];
+    game.selected[data.phone]={
+      ...game.players[data.phone],
+      chosen:data.cards
+    };
   });
 });
 
@@ -111,7 +136,6 @@ function startPickPhase(){
 
   const playerCount = Object.keys(game.players).length;
 
-  // need at least 2 players
   if(playerCount < 2){
     io.emit("phase","waiting");
     setTimeout(startPickPhase,5000);
@@ -168,17 +192,20 @@ function checkWinner(){
 
     const player=game.selected[phone];
 
-    if(isWinner(player.card)){
+    for(let card of player.chosen){
 
-      clearInterval(game.interval);
+      if(isWinner(card)){
 
-      io.emit("winner",{
-        telegramName:player.telegramName,
-        card:player.card
-      });
+        clearInterval(game.interval);
 
-      endGame();
-      return;
+        io.emit("winner",{
+          telegramName:player.telegramName,
+          card
+        });
+
+        endGame();
+        return;
+      }
     }
   }
 }
@@ -190,6 +217,9 @@ function endGame(){
 
   io.emit("game_end","🏆 GOOD BINGO");
 
+  // reset card uniqueness for next round
+  game.usedCards.clear();
+
   setTimeout(startPickPhase,30000);
 }
 
@@ -198,5 +228,5 @@ setTimeout(startPickPhase,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL ONE-CARD SYSTEM READY");
+  console.log("🚀 FINAL MULTI-CARTELA SYSTEM READY");
 });

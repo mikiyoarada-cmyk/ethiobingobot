@@ -2,83 +2,90 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Bingo Game</title>
+<title>Bingo</title>
 
 <style>
-body{font-family:Arial;text-align:center;background:#f5f5f5}
-.card{border:2px solid #000;margin:10px auto;padding:5px;width:200px;background:#fff}
-.header{display:grid;grid-template-columns:repeat(5,1fr);background:#ddd;font-weight:bold}
+body{text-align:center;font-family:Arial;background:#f5f5f5}
+.cards{display:flex;flex-wrap:wrap;justify-content:center}
+.card{border:2px solid #000;margin:5px;padding:5px;width:150px;background:#fff;cursor:pointer}
+.selected{border:3px solid green}
+.header{display:grid;grid-template-columns:repeat(5,1fr);background:#ddd}
 .grid{display:grid;grid-template-columns:repeat(5,1fr)}
-.cell{border:1px solid #000;padding:6px}
+.cell{border:1px solid #000;padding:4px}
 .mark{background:green;color:#fff}
 </style>
 </head>
 
 <body>
 
-<h2>🎯 BINGO GAME</h2>
+<h2>BINGO</h2>
 <h3 id="status"></h3>
 <h3 id="called"></h3>
 
-<div id="card"></div>
-
-<button onclick="enableSound()">🔊 Enable Sound</button>
-<button onclick="joinGame()">Join Game</button>
+<div id="cards" class="cards"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 
-const socket = io();
+const socket=io();
 
-let myCard=null;
-let joined=false;
-let audioEnabled=false;
+let phone=prompt("Phone");
+let name=prompt("Telegram name");
 
-function enableSound(){
-  audioEnabled=true;
-  new Audio("/voices/B1.mp3").play().catch(()=>{});
-}
+let selected=[];
 
-let phone=prompt("Enter Phone");
-let name=prompt("Enter Telegram Name");
+/* JOIN */
+socket.emit("join",{phone,telegramName:name});
 
-function joinGame(){
+/* LOAD CARDS */
+socket.on("cards",(cards)=>{
 
-  if(joined) return;
+  let html="";
 
-  socket.emit("join",{phone,telegramName:name});
-  joined=true;
-}
+  cards.forEach((c,i)=>{
 
-/* ================= LOAD CARD ================= */
-socket.on("card",(card)=>{
-
-  myCard=card;
-
-  let html=`
-  <div class="card">
-    <div class="header">
-      <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
+    html+=`
+    <div class="card" onclick="pick(${i})" id="c${i}">
+      <div class="header">
+        <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
+      </div>
+      <div class="grid">
+        ${c.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
+      </div>
     </div>
-    <div class="grid">
-      ${card.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
-    </div>
-  </div>
-  `;
+    `;
+  });
 
-  document.getElementById("card").innerHTML=html;
+  document.getElementById("cards").innerHTML=html;
+
+  window.allCards=cards;
 });
 
-/* ================= AUTO SELECT ================= */
+/* PICK MULTIPLE */
+function pick(i){
+
+  if(selected.includes(i)){
+    selected=selected.filter(x=>x!==i);
+    document.getElementById("c"+i).classList.remove("selected");
+  }else{
+    selected.push(i);
+    document.getElementById("c"+i).classList.add("selected");
+  }
+}
+
+/* PHASE */
 socket.on("phase",(p)=>{
 
   if(p==="picking"){
-    document.getElementById("status").innerText="🟢 AUTO JOINED";
-    socket.emit("select_cartela",{phone});
+    document.getElementById("status").innerText="PICK CARTELAS";
+    socket.emit("select_cartelas",{
+      phone,
+      cards:selected.map(i=>allCards[i])
+    });
   }
 
   if(p==="playing"){
-    document.getElementById("status").innerText="🎮 GAME STARTED";
+    document.getElementById("status").innerText="GAME STARTED";
   }
 
   if(p==="waiting"){
@@ -86,29 +93,18 @@ socket.on("phase",(p)=>{
   }
 });
 
-/* ================= MSG ================= */
-socket.on("msg",(m)=>{
-  alert(m);
-});
+/* MSG */
+socket.on("msg",(m)=>alert(m));
 
-/* ================= COUNTDOWN ================= */
+/* COUNTDOWN */
 socket.on("countdown",(t)=>{
   document.getElementById("status").innerText="Start in "+t;
 });
 
-/* ================= NUMBER ================= */
-socket.on("number",(n)=>{
-  if(audioEnabled){
-    let letter = n<=15?"B":n<=30?"I":n<=45?"N":n<=60?"G":"O";
-    new Audio(`/voices/${letter}${n}.mp3`).play().catch(()=>{});
-  }
-});
-
-/* ================= CALLED ================= */
+/* CALLED */
 socket.on("called",(arr)=>{
 
-  document.getElementById("called").innerText=
-    "Called: "+arr.join(",");
+  document.getElementById("called").innerText="Called: "+arr.join(",");
 
   document.querySelectorAll(".cell").forEach(c=>{
     if(arr.includes(Number(c.innerText))){
@@ -117,15 +113,12 @@ socket.on("called",(arr)=>{
   });
 });
 
-/* ================= WINNER ================= */
+/* WINNER */
 socket.on("winner",(w)=>{
-
-  document.getElementById("status").innerText=
-    "🏆 "+w.telegramName+" WON";
-
+  alert("🏆 "+w.telegramName+" WON");
 });
 
-/* ================= END ================= */
+/* END */
 socket.on("game_end",(m)=>{
   document.getElementById("status").innerText=m;
 });
