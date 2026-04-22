@@ -6,19 +6,11 @@
 
 <style>
 body{font-family:Arial;text-align:center;background:#f5f5f5}
-.cards{display:flex;flex-wrap:wrap;justify-content:center}
-.card{border:2px solid #000;margin:5px;padding:5px;width:150px;background:#fff}
+.card{border:2px solid #000;margin:10px auto;padding:5px;width:200px;background:#fff}
 .header{display:grid;grid-template-columns:repeat(5,1fr);background:#ddd;font-weight:bold}
 .grid{display:grid;grid-template-columns:repeat(5,1fr)}
-.cell{border:1px solid #000;padding:4px}
+.cell{border:1px solid #000;padding:6px}
 .mark{background:green;color:#fff}
-.selected{border:3px solid orange}
-#winnerBox{
-  background:#fff;
-  border:3px solid green;
-  padding:10px;
-  margin:10px;
-}
 </style>
 </head>
 
@@ -28,20 +20,18 @@ body{font-family:Arial;text-align:center;background:#f5f5f5}
 <h3 id="status"></h3>
 <h3 id="called"></h3>
 
-<div id="winnerBox"></div>
+<div id="card"></div>
 
 <button onclick="enableSound()">🔊 Enable Sound</button>
-<button onclick="confirmPick()">Confirm Cartelas</button>
-
-<div id="cards" class="cards"></div>
+<button onclick="joinGame()">Join Game</button>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 
 const socket = io();
 
-let myCards=[];
-let selected=[];
+let myCard=null;
+let joined=false;
 let audioEnabled=false;
 
 function enableSound(){
@@ -52,56 +42,39 @@ function enableSound(){
 let phone=prompt("Enter Phone");
 let name=prompt("Enter Telegram Name");
 
-socket.emit("join",{phone,telegramName:name});
+function joinGame(){
 
-/* ================= LOAD ================= */
-socket.on("cards",(cards)=>{
+  if(joined) return;
 
-  myCards=cards;
+  socket.emit("join",{phone,telegramName:name});
+  joined=true;
+}
 
-  let html="";
+/* ================= LOAD CARD ================= */
+socket.on("card",(card)=>{
 
-  cards.forEach((c,i)=>{
-    html+=`
-    <div class="card" onclick="pick(${i},this)">
-      <b>Card ${i+1}</b>
-      <div class="header">
-        <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
-      </div>
-      <div class="grid">
-        ${c.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
-      </div>
-    </div>`;
-  });
+  myCard=card;
 
-  document.getElementById("cards").innerHTML=html;
+  let html=`
+  <div class="card">
+    <div class="header">
+      <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
+    </div>
+    <div class="grid">
+      ${card.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
+    </div>
+  </div>
+  `;
+
+  document.getElementById("card").innerHTML=html;
 });
 
-/* ================= PICK ================= */
-function pick(i,el){
-
-  if(selected.includes(i)){
-    selected=selected.filter(x=>x!==i);
-    el.classList.remove("selected");
-  }else{
-    selected.push(i);
-    el.classList.add("selected");
-  }
-}
-
-function confirmPick(){
-  socket.emit("select_cartelas",{
-    phone,
-    cards:selected.map(i=>myCards[i])
-  });
-}
-
-/* ================= PHASE ================= */
+/* ================= AUTO SELECT ================= */
 socket.on("phase",(p)=>{
 
   if(p==="picking"){
-    document.getElementById("status").innerText="🟢 PICK NOW (30s)";
-    document.getElementById("winnerBox").innerHTML="";
+    document.getElementById("status").innerText="🟢 AUTO JOINED";
+    socket.emit("select_cartela",{phone});
   }
 
   if(p==="playing"){
@@ -140,8 +113,6 @@ socket.on("called",(arr)=>{
   document.querySelectorAll(".cell").forEach(c=>{
     if(arr.includes(Number(c.innerText))){
       c.classList.add("mark");
-    }else{
-      c.classList.remove("mark");
     }
   });
 });
@@ -149,26 +120,14 @@ socket.on("called",(arr)=>{
 /* ================= WINNER ================= */
 socket.on("winner",(w)=>{
 
-  let html = `
-  <h2>🏆 WINNER: ${w.telegramName}</h2>
-  <h3>GOOD BINGO</h3>
-  <div class="card">
-    <div class="header">
-      <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
-    </div>
-    <div class="grid">
-      ${w.card.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
-    </div>
-  </div>
-  `;
+  document.getElementById("status").innerText=
+    "🏆 "+w.telegramName+" WON";
 
-  document.getElementById("winnerBox").innerHTML = html;
 });
 
 /* ================= END ================= */
 socket.on("game_end",(m)=>{
-  document.getElementById("status").innerText = m;
-  selected=[];
+  document.getElementById("status").innerText=m;
 });
 
 </script>

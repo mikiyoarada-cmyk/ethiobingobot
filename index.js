@@ -47,7 +47,7 @@ function generateCard(){
   ];
 }
 
-/* ================= WIN CHECK (ONE LINE) ================= */
+/* ================= WIN CHECK ================= */
 function isWinner(card){
 
   // rows
@@ -84,26 +84,25 @@ io.on("connection",(socket)=>{
 
   socket.on("join",(data)=>{
 
+    // 🔥 ONLY 1 CARD PER PLAYER
     game.players[data.phone]={
       socketId:socket.id,
       telegramName:data.telegramName,
-      cards:[...Array(600)].map(()=>generateCard())
+      card:generateCard()
     };
 
-    socket.emit("cards",game.players[data.phone].cards);
+    socket.emit("card",game.players[data.phone].card);
     socket.emit("phase",game.phase);
   });
 
-  socket.on("select_cartelas",(data)=>{
+  socket.on("select_cartela",(data)=>{
 
+    // 🔴 BLOCK AFTER START
     if(game.phase!=="picking"){
       return socket.emit("msg","WAIT FOR NEXT GAME");
     }
 
-    game.selected[data.phone]={
-      ...game.players[data.phone],
-      chosen:data.cards
-    };
+    game.selected[data.phone]=game.players[data.phone];
   });
 });
 
@@ -112,12 +111,10 @@ function startPickPhase(){
 
   const playerCount = Object.keys(game.players).length;
 
-  // 🔴 REQUIRE MIN 2 PLAYERS
+  // need at least 2 players
   if(playerCount < 2){
     io.emit("phase","waiting");
-    console.log("Waiting for players...");
-
-    setTimeout(startPickPhase,5000); // check again
+    setTimeout(startPickPhase,5000);
     return;
   }
 
@@ -171,20 +168,17 @@ function checkWinner(){
 
     const player=game.selected[phone];
 
-    for(let card of player.chosen){
+    if(isWinner(player.card)){
 
-      if(isWinner(card)){
+      clearInterval(game.interval);
 
-        clearInterval(game.interval);
+      io.emit("winner",{
+        telegramName:player.telegramName,
+        card:player.card
+      });
 
-        io.emit("winner",{
-          telegramName:player.telegramName,
-          card
-        });
-
-        endGame();
-        return;
-      }
+      endGame();
+      return;
     }
   }
 }
@@ -204,5 +198,5 @@ setTimeout(startPickPhase,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL BINGO WITH PLAYER LIMIT READY");
+  console.log("🚀 FINAL ONE-CARD SYSTEM READY");
 });
