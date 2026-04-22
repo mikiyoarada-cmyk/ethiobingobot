@@ -13,6 +13,12 @@ body{font-family:Arial;text-align:center;background:#f5f5f5}
 .cell{border:1px solid #000;padding:4px}
 .mark{background:green;color:#fff}
 .selected{border:3px solid orange}
+#winnerBox{
+  background:#fff;
+  border:3px solid green;
+  padding:10px;
+  margin:10px;
+}
 </style>
 </head>
 
@@ -22,6 +28,9 @@ body{font-family:Arial;text-align:center;background:#f5f5f5}
 <h3 id="status"></h3>
 <h3 id="called"></h3>
 
+<div id="winnerBox"></div>
+
+<button onclick="enableSound()">🔊 Enable Sound</button>
 <button onclick="confirmPick()">Confirm Cartelas</button>
 
 <div id="cards" class="cards"></div>
@@ -33,13 +42,22 @@ const socket = io();
 
 let myCards=[];
 let selected=[];
+let audioEnabled=false;
 let phase="waiting";
 
-let phone=prompt("Phone");
-let name=prompt("Name");
+/* ================= SOUND ================= */
+function enableSound(){
+  audioEnabled=true;
+  new Audio("/voices/B1.mp3").play().catch(()=>{});
+}
+
+/* ================= USER ================= */
+let phone=prompt("Enter Phone");
+let name=prompt("Enter Telegram Name");
 
 socket.emit("join",{phone,telegramName:name});
 
+/* ================= LOAD ================= */
 socket.on("cards",(cards)=>{
 
   myCards=cards;
@@ -62,10 +80,12 @@ socket.on("cards",(cards)=>{
   document.getElementById("cards").innerHTML=html;
 });
 
+/* ================= PICK ================= */
 function pick(i,el){
 
-  if(phase!=="picking"){
-    return alert("⏳ WAIT NEXT GAME");
+  if(phase !== "picking"){
+    alert("⏳ WAIT FOR NEXT GAME");
+    return;
   }
 
   if(selected.includes(i)){
@@ -79,8 +99,14 @@ function pick(i,el){
 
 function confirmPick(){
 
-  if(phase!=="picking"){
-    return alert("⏳ WAIT NEXT GAME");
+  if(phase !== "picking"){
+    alert("⏳ WAIT FOR NEXT GAME");
+    return;
+  }
+
+  if(selected.length === 0){
+    alert("Select at least 1 card");
+    return;
   }
 
   socket.emit("select_cartelas",{
@@ -89,11 +115,14 @@ function confirmPick(){
   });
 }
 
+/* ================= PHASE ================= */
 socket.on("phase",(p)=>{
-  phase=p;
+
+  phase = p;
 
   if(p==="picking"){
-    document.getElementById("status").innerText="🟢 PICK NOW";
+    document.getElementById("status").innerText="🟢 PICK NOW (30s)";
+    document.getElementById("winnerBox").innerHTML="";
     selected=[];
     document.querySelectorAll(".card").forEach(c=>c.classList.remove("selected"));
   }
@@ -107,10 +136,62 @@ socket.on("phase",(p)=>{
   }
 });
 
-socket.on("msg",(m)=>alert(m));
+/* ================= MSG ================= */
+socket.on("msg",(m)=>{
+  alert(m);
+});
 
+/* ================= COUNTDOWN ================= */
+socket.on("countdown",(t)=>{
+  document.getElementById("status").innerText="Start in "+t;
+});
+
+/* ================= NUMBER ================= */
+socket.on("number",(n)=>{
+  if(audioEnabled){
+    let letter = n<=15?"B":n<=30?"I":n<=45?"N":n<=60?"G":"O";
+    new Audio(`/voices/${letter}${n}.mp3`).play().catch(()=>{});
+  }
+});
+
+/* ================= CALLED ================= */
 socket.on("called",(arr)=>{
-  document.getElementById("called").innerText="Called: "+arr.join(",");
+
+  document.getElementById("called").innerText=
+    "Called: "+arr.join(",");
+
+  document.querySelectorAll(".cell").forEach(c=>{
+    let val = c.innerText;
+
+    if(val !== "FREE" && arr.includes(Number(val))){
+      c.classList.add("mark");
+    }
+  });
+});
+
+/* ================= WINNER ================= */
+socket.on("winner",(w)=>{
+
+  let html = `
+  <h2>🏆 WINNER: ${w.telegramName}</h2>
+  <h3>GOOD BINGO</h3>
+  <div class="card">
+    <div class="header">
+      <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
+    </div>
+    <div class="grid">
+      ${w.card.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
+    </div>
+  </div>
+  `;
+
+  document.getElementById("winnerBox").innerHTML = html;
+});
+
+/* ================= END ================= */
+socket.on("game_end",(m)=>{
+  document.getElementById("status").innerText = m;
+  selected=[];
 });
 
 </script>
