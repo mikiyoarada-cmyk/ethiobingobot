@@ -3,7 +3,6 @@ require("dotenv").config();
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-const mongoose = require("mongoose");
 
 const app = express();
 const server = http.createServer(app);
@@ -12,17 +11,13 @@ const io = new Server(server);
 app.use(express.static("public"));
 app.use(express.json());
 
-mongoose.connect(process.env.MONGODB_URI)
-.then(()=>console.log("MongoDB connected"))
-.catch(console.log);
-
 /* ================= GAME ================= */
 let game = {
   phase:"waiting",
   players:{},
   selected:{},
   called:[],
-  usedCards: new Set(),
+  usedCards:new Set(),
   interval:null
 };
 
@@ -48,38 +43,34 @@ function generateCard(){
   ];
 }
 
-/* ================= UNIQUE CARD STRING ================= */
-function cardKey(card){
-  return card.flat().join("-");
+function cardKey(c){
+  return c.flat().join("-");
 }
 
 /* ================= WIN CHECK ================= */
 function isWinner(card){
 
-  // rows
   for(let r=0;r<5;r++){
-    if(card[r].every(n=>n==="FREE" || game.called.includes(n))) return true;
+    if(card[r].every(n=>n==="FREE"||game.called.includes(n))) return true;
   }
 
-  // columns
   for(let c=0;c<5;c++){
     let ok=true;
     for(let r=0;r<5;r++){
       let n=card[r][c];
-      if(n!=="FREE" && !game.called.includes(n)) ok=false;
+      if(n!=="FREE"&&!game.called.includes(n)) ok=false;
     }
     if(ok) return true;
   }
 
-  // diagonals
   if([0,1,2,3,4].every(i=>{
     let n=card[i][i];
-    return n==="FREE" || game.called.includes(n);
+    return n==="FREE"||game.called.includes(n);
   })) return true;
 
   if([0,1,2,3,4].every(i=>{
     let n=card[i][4-i];
-    return n==="FREE" || game.called.includes(n);
+    return n==="FREE"||game.called.includes(n);
   })) return true;
 
   return false;
@@ -90,19 +81,17 @@ io.on("connection",(socket)=>{
 
   socket.on("join",(data)=>{
 
-    // ❌ BLOCK JOIN DURING GAME
     if(game.phase==="playing"){
       return socket.emit("msg","WAIT FOR NEXT GAME");
     }
 
-    // create 600 UNIQUE cards pool
     let cards=[];
     while(cards.length<600){
       let c=generateCard();
-      let key=cardKey(c);
+      let k=cardKey(c);
 
-      if(!game.usedCards.has(key)){
-        game.usedCards.add(key);
+      if(!game.usedCards.has(k)){
+        game.usedCards.add(k);
         cards.push(c);
       }
     }
@@ -119,7 +108,6 @@ io.on("connection",(socket)=>{
 
   socket.on("select_cartelas",(data)=>{
 
-    // ❌ BLOCK AFTER START
     if(game.phase!=="picking"){
       return socket.emit("msg","WAIT FOR NEXT GAME");
     }
@@ -134,9 +122,7 @@ io.on("connection",(socket)=>{
 /* ================= PICK PHASE ================= */
 function startPickPhase(){
 
-  const playerCount = Object.keys(game.players).length;
-
-  if(playerCount < 2){
+  if(Object.keys(game.players).length<2){
     io.emit("phase","waiting");
     setTimeout(startPickPhase,5000);
     return;
@@ -155,7 +141,7 @@ function startPickPhase(){
     io.emit("countdown",t);
     t--;
 
-    if(t < 0){
+    if(t<0){
       clearInterval(timer);
       startGame();
     }
@@ -217,7 +203,6 @@ function endGame(){
 
   io.emit("game_end","🏆 GOOD BINGO");
 
-  // reset card uniqueness for next round
   game.usedCards.clear();
 
   setTimeout(startPickPhase,30000);
@@ -228,5 +213,5 @@ setTimeout(startPickPhase,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL MULTI-CARTELA SYSTEM READY");
+  console.log("🚀 FINAL FIXED BINGO READY");
 });
