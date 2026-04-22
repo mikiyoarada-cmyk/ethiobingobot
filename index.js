@@ -22,6 +22,7 @@ let game = {
   players:{},
   selected:{},
   called:[],
+  takenCards:[], // 🔥 GLOBAL USED CARTELAS
   interval:null
 };
 
@@ -50,12 +51,10 @@ function generateCard(){
 /* ================= WIN CHECK ================= */
 function isWinner(card){
 
-  // rows
   for(let r=0;r<5;r++){
     if(card[r].every(n=>n==="FREE" || game.called.includes(n))) return true;
   }
 
-  // columns
   for(let c=0;c<5;c++){
     let win=true;
     for(let r=0;r<5;r++){
@@ -65,13 +64,11 @@ function isWinner(card){
     if(win) return true;
   }
 
-  // diagonal 1
   if([0,1,2,3,4].every(i=>{
     let n=card[i][i];
     return n==="FREE" || game.called.includes(n);
   })) return true;
 
-  // diagonal 2
   if([0,1,2,3,4].every(i=>{
     let n=card[i][4-i];
     return n==="FREE" || game.called.includes(n);
@@ -93,6 +90,9 @@ io.on("connection",(socket)=>{
 
     socket.emit("cards",game.players[data.phone].cards);
     socket.emit("phase",game.phase);
+
+    // send taken cards
+    socket.emit("taken", game.takenCards);
   });
 
   socket.on("select_cartelas",(data)=>{
@@ -101,10 +101,28 @@ io.on("connection",(socket)=>{
       return socket.emit("msg","⏳ WAIT FOR NEXT GAME");
     }
 
+    let chosen = [];
+
+    for(let card of data.cards){
+
+      let str = JSON.stringify(card);
+
+      if(game.takenCards.includes(str)){
+        socket.emit("msg","❌ Card already taken");
+        continue;
+      }
+
+      game.takenCards.push(str);
+      chosen.push(card);
+    }
+
     game.selected[data.phone]={
       ...game.players[data.phone],
-      chosen:data.cards
+      chosen
     };
+
+    // broadcast updated taken cards
+    io.emit("taken", game.takenCards);
   });
 });
 
@@ -113,10 +131,8 @@ function startPickPhase(){
 
   const playerCount = Object.keys(game.players).length;
 
-  // require minimum 2 players
   if(playerCount < 2){
     io.emit("phase","waiting");
-    console.log("Waiting for players...");
     setTimeout(startPickPhase,5000);
     return;
   }
@@ -124,9 +140,11 @@ function startPickPhase(){
   game.phase="picking";
   game.called=[];
   game.selected={};
+  game.takenCards=[]; // reset each round
 
   io.emit("phase","picking");
   io.emit("called",[]);
+  io.emit("taken",[]);
 
   let t=30;
 
@@ -204,5 +222,5 @@ setTimeout(startPickPhase,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL BINGO WITH PLAYER LIMIT READY");
+  console.log("🚀 FINAL BINGO READY (NO DUPLICATES)");
 });
