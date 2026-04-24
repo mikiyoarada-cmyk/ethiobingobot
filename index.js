@@ -22,6 +22,7 @@ let game = {
   players:{},
   selected:{},
   called:[],
+  takenCards:[],
   interval:null
 };
 
@@ -89,6 +90,8 @@ io.on("connection",(socket)=>{
 
     socket.emit("cards",game.players[data.phone].cards);
     socket.emit("phase",game.phase);
+    socket.emit("taken", game.takenCards);
+    socket.emit("called", game.called); // 🔥 ensure sync on join
   });
 
   socket.on("select_cartelas",(data)=>{
@@ -97,10 +100,27 @@ io.on("connection",(socket)=>{
       return socket.emit("msg","⏳ WAIT FOR NEXT GAME");
     }
 
+    let chosen=[];
+
+    for(let card of data.cards){
+
+      let str=JSON.stringify(card);
+
+      if(game.takenCards.includes(str)){
+        socket.emit("msg","❌ Card already taken");
+        continue;
+      }
+
+      game.takenCards.push(str);
+      chosen.push(card);
+    }
+
     game.selected[data.phone]={
       ...game.players[data.phone],
-      chosen:data.cards
+      chosen
     };
+
+    io.emit("taken", game.takenCards);
   });
 });
 
@@ -111,17 +131,18 @@ function startPickPhase(){
 
   if(playerCount < 2){
     io.emit("phase","waiting");
-    console.log("Waiting for players...");
     setTimeout(startPickPhase,5000);
     return;
   }
 
   game.phase="picking";
-  game.called=[];
+  game.called=[];           // 🔥 RESET CALLED
   game.selected={};
+  game.takenCards=[];
 
   io.emit("phase","picking");
-  io.emit("called",[]);
+  io.emit("called",[]);     // 🔥 FORCE CLEAR UI
+  io.emit("taken",[]);
 
   let t=30;
 
@@ -191,6 +212,13 @@ function endGame(){
 
   io.emit("game_end","🏆 GOOD BINGO");
 
+  // 🔥 CLEAR AFTER GAME END
+  game.called=[];
+  game.takenCards=[];
+
+  io.emit("called",[]);
+  io.emit("taken",[]);
+
   setTimeout(startPickPhase,30000);
 }
 
@@ -199,5 +227,5 @@ setTimeout(startPickPhase,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL BINGO WITH PLAYER LIMIT READY");
+  console.log("🚀 FINAL BINGO READY (RESET FIXED)");
 });
