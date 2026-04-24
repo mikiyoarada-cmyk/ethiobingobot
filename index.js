@@ -1,4 +1,3 @@
-// ======================= index.js =======================
 require("dotenv").config();
 
 const express = require("express");
@@ -17,17 +16,19 @@ mongoose.connect(process.env.MONGODB_URI)
 .then(()=>console.log("MongoDB connected"))
 .catch(console.log);
 
-/* ================= GAME ================= */
+/* ================= GAME STATE ================= */
 let game = {
   phase:"waiting",
   players:{},
   selected:{},
   called:[],
   takenCards:[],
-  interval:null
+  interval:null,
+  currentNumber:null,
+  lock:false
 };
 
-/* ================= GLOBAL CARDS ================= */
+/* ================= CARDS (600 FIXED PER GAME) ================= */
 function generateCard(){
   function r(min,max){
     let a=[];
@@ -51,7 +52,7 @@ function generateCard(){
 
 const globalCards = [...Array(600)].map(()=>generateCard());
 
-/* ================= WIN ================= */
+/* ================= WIN CHECK ================= */
 function isWinner(card){
 
   for(let r=0;r<5;r++){
@@ -91,26 +92,23 @@ io.on("connection",(socket)=>{
       cards:globalCards
     };
 
-    socket.emit("cards", globalCards);
-    socket.emit("phase", game.phase);
-    socket.emit("taken", game.takenCards);
-    socket.emit("called", game.called);
+    socket.emit("cards",globalCards);
+    socket.emit("phase",game.phase);
+    socket.emit("called",game.called);
+    socket.emit("taken",game.takenCards);
   });
 
   socket.on("select_cartelas",(data)=>{
 
-    if(game.phase!=="picking"){
-      return socket.emit("msg","⏳ WAIT FOR NEXT GAME");
-    }
+    if(game.phase!=="picking") return socket.emit("msg","WAIT");
 
     let chosen=[];
 
     for(let card of data.cards){
-
       let str=JSON.stringify(card);
 
       if(game.takenCards.includes(str)){
-        socket.emit("msg","❌ Already taken");
+        socket.emit("msg","ALREADY TAKEN");
         continue;
       }
 
@@ -123,14 +121,15 @@ io.on("connection",(socket)=>{
       chosen
     };
 
-    io.emit("taken", game.takenCards);
+    io.emit("taken",game.takenCards);
   });
 });
 
-/* ================= PICK ================= */
+/* ================= PICK PHASE ================= */
 function startPickPhase(){
 
   if(Object.keys(game.players).length < 2){
+    game.phase="waiting";
     io.emit("phase","waiting");
     setTimeout(startPickPhase,5000);
     return;
@@ -140,6 +139,7 @@ function startPickPhase(){
   game.called=[];
   game.selected={};
   game.takenCards=[];
+  game.currentNumber=null;
 
   io.emit("phase","picking");
   io.emit("called",[]);
@@ -148,6 +148,7 @@ function startPickPhase(){
   let t=30;
 
   let timer=setInterval(()=>{
+
     io.emit("countdown",t);
     t--;
 
@@ -155,10 +156,11 @@ function startPickPhase(){
       clearInterval(timer);
       startGame();
     }
+
   },1000);
 }
 
-/* ================= GAME ================= */
+/* ================= GAME (SYNC FIX CORE) ================= */
 function startGame(){
 
   game.phase="playing";
@@ -166,27 +168,32 @@ function startGame(){
 
   game.interval=setInterval(()=>{
 
+    if(game.lock) return;
+    game.lock=true;
+
     let n;
     do{
       n=Math.floor(Math.random()*75)+1;
     }while(game.called.includes(n));
 
     game.called.push(n);
+    game.currentNumber=n;
 
-    // 🔥 SEND NUMBER FIRST → ensures voice matches
+    // 🔥 STEP 1: send number FIRST (voice sync)
     io.emit("number",n);
 
-    // 🔥 SMALL DELAY → then update called list
+    // 🔥 STEP 2: update board AFTER small delay (fix mismatch)
     setTimeout(()=>{
       io.emit("called",game.called);
-    },300);
+      game.lock=false;
+    },600);
 
     checkWinner();
 
   },3000);
 }
 
-/* ================= WINNER ================= */
+/* ================= WIN ================= */
 function checkWinner(){
 
   for(let phone in game.selected){
@@ -211,22 +218,27 @@ function checkWinner(){
   }
 }
 
-/* ================= END ================= */
+/* ================= END (FULL RESET FIX) ================= */
 function endGame(){
 
   game.phase="waiting";
+  io.emit("game_end","🏆 GAME OVER");
 
-  io.emit("game_end","🏆 GOOD BINGO");
-
-  // 🔥 CLEAR UI AFTER GAME
+  // 🔥 CLEAR AFTER GAME ENDS (IMPORTANT FIX)
   setTimeout(()=>{
+
     game.called=[];
     game.takenCards=[];
+    game.currentNumber=null;
+    game.selected={};
+
     io.emit("called",[]);
     io.emit("taken",[]);
-  },2000);
+    io.emit("number",null);
 
-  // 🔥 AUTO NEXT GAME
+  },1500);
+
+  // 🔥 AUTO RESTART
   setTimeout(startPickPhase,30000);
 }
 
@@ -235,5 +247,5 @@ setTimeout(startPickPhase,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL PERFECT BINGO READY");
+  console.log("🚀 SYNC BINGO FIXED SYSTEM READY");
 });
