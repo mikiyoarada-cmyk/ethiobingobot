@@ -1,3 +1,4 @@
+// ======================= index.js =======================
 require("dotenv").config();
 
 const express = require("express");
@@ -26,7 +27,7 @@ let game = {
   interval:null
 };
 
-/* ================= GLOBAL 600 CARDS ================= */
+/* ================= GLOBAL CARDS ================= */
 function generateCard(){
   function r(min,max){
     let a=[];
@@ -48,10 +49,9 @@ function generateCard(){
   ];
 }
 
-// 🔥 ONE TIME GENERATION (SHARED)
 const globalCards = [...Array(600)].map(()=>generateCard());
 
-/* ================= WIN CHECK ================= */
+/* ================= WIN ================= */
 function isWinner(card){
 
   for(let r=0;r<5;r++){
@@ -88,7 +88,7 @@ io.on("connection",(socket)=>{
     game.players[data.phone]={
       socketId:socket.id,
       telegramName:data.telegramName,
-      cards:globalCards // 🔥 SAME FOR ALL USERS
+      cards:globalCards
     };
 
     socket.emit("cards", globalCards);
@@ -127,12 +127,10 @@ io.on("connection",(socket)=>{
   });
 });
 
-/* ================= PICK PHASE ================= */
+/* ================= PICK ================= */
 function startPickPhase(){
 
-  const playerCount = Object.keys(game.players).length;
-
-  if(playerCount < 2){
+  if(Object.keys(game.players).length < 2){
     io.emit("phase","waiting");
     setTimeout(startPickPhase,5000);
     return;
@@ -153,7 +151,7 @@ function startPickPhase(){
     io.emit("countdown",t);
     t--;
 
-    if(t < 0){
+    if(t<0){
       clearInterval(timer);
       startGame();
     }
@@ -175,8 +173,13 @@ function startGame(){
 
     game.called.push(n);
 
+    // 🔥 SEND NUMBER FIRST → ensures voice matches
     io.emit("number",n);
-    io.emit("called",game.called);
+
+    // 🔥 SMALL DELAY → then update called list
+    setTimeout(()=>{
+      io.emit("called",game.called);
+    },300);
 
     checkWinner();
 
@@ -215,13 +218,16 @@ function endGame(){
 
   io.emit("game_end","🏆 GOOD BINGO");
 
-  game.called=[];
-  game.takenCards=[];
+  // 🔥 CLEAR UI AFTER GAME
+  setTimeout(()=>{
+    game.called=[];
+    game.takenCards=[];
+    io.emit("called",[]);
+    io.emit("taken",[]);
+  },2000);
 
-  io.emit("called",[]);
-  io.emit("taken",[]);
-
-  setTimeout(startPickPhase,30000); // 🔥 AUTO NEXT GAME
+  // 🔥 AUTO NEXT GAME
+  setTimeout(startPickPhase,30000);
 }
 
 /* ================= AUTO START ================= */
@@ -229,5 +235,5 @@ setTimeout(startPickPhase,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL GLOBAL BINGO READY");
+  console.log("🚀 FINAL PERFECT BINGO READY");
 });
