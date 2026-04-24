@@ -26,7 +26,7 @@ let game = {
   interval:null
 };
 
-/* ================= CARD ================= */
+/* ================= GLOBAL 600 CARDS ================= */
 function generateCard(){
   function r(min,max){
     let a=[];
@@ -47,6 +47,9 @@ function generateCard(){
     [B[4],I[4],N[4],G[4],O[4]],
   ];
 }
+
+// 🔥 ONE TIME GENERATION (SHARED)
+const globalCards = [...Array(600)].map(()=>generateCard());
 
 /* ================= WIN CHECK ================= */
 function isWinner(card){
@@ -85,13 +88,13 @@ io.on("connection",(socket)=>{
     game.players[data.phone]={
       socketId:socket.id,
       telegramName:data.telegramName,
-      cards:[...Array(600)].map(()=>generateCard())
+      cards:globalCards // 🔥 SAME FOR ALL USERS
     };
 
-    socket.emit("cards",game.players[data.phone].cards);
-    socket.emit("phase",game.phase);
+    socket.emit("cards", globalCards);
+    socket.emit("phase", game.phase);
     socket.emit("taken", game.takenCards);
-    socket.emit("called", game.called); // 🔥 ensure sync on join
+    socket.emit("called", game.called);
   });
 
   socket.on("select_cartelas",(data)=>{
@@ -107,7 +110,7 @@ io.on("connection",(socket)=>{
       let str=JSON.stringify(card);
 
       if(game.takenCards.includes(str)){
-        socket.emit("msg","❌ Card already taken");
+        socket.emit("msg","❌ Already taken");
         continue;
       }
 
@@ -136,12 +139,12 @@ function startPickPhase(){
   }
 
   game.phase="picking";
-  game.called=[];           // 🔥 RESET CALLED
+  game.called=[];
   game.selected={};
   game.takenCards=[];
 
   io.emit("phase","picking");
-  io.emit("called",[]);     // 🔥 FORCE CLEAR UI
+  io.emit("called",[]);
   io.emit("taken",[]);
 
   let t=30;
@@ -212,14 +215,13 @@ function endGame(){
 
   io.emit("game_end","🏆 GOOD BINGO");
 
-  // 🔥 CLEAR AFTER GAME END
   game.called=[];
   game.takenCards=[];
 
   io.emit("called",[]);
   io.emit("taken",[]);
 
-  setTimeout(startPickPhase,30000);
+  setTimeout(startPickPhase,30000); // 🔥 AUTO NEXT GAME
 }
 
 /* ================= AUTO START ================= */
@@ -227,5 +229,5 @@ setTimeout(startPickPhase,3000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL BINGO READY (RESET FIXED)");
+  console.log("🚀 FINAL GLOBAL BINGO READY");
 });
