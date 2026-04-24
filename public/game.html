@@ -1,4 +1,3 @@
-<!-- ======================= game.html ======================= -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -40,12 +39,14 @@ let myCards=[];
 let selected=[];
 let audioEnabled=false;
 let phase="waiting";
-let takenCards=[];
 
-/* 🔊 PERFECT AUDIO QUEUE */
+/* ================= SYNC CONTROL ================= */
+let currentGameId=null;
 let audioQueue=[];
 let playing=false;
+let takenCards=[];
 
+/* ================= AUDIO ENGINE (FIXED SYNC) ================= */
 function playNext(){
 
   if(!audioEnabled) return;
@@ -63,9 +64,12 @@ function playNext(){
   let audio=new Audio(`/voices/${letter}${n}.mp3`);
   audio.play().catch(()=>{});
 
-  audio.onended=()=>setTimeout(playNext,200);
+  audio.onended=()=>{
+    setTimeout(playNext,120);
+  };
 }
 
+/* ================= ENABLE SOUND ================= */
 function enableSound(){
   audioEnabled=true;
   new Audio("/voices/B1.mp3").play().catch(()=>{});
@@ -77,11 +81,18 @@ let name=prompt("Enter Telegram Name");
 
 socket.emit("join",{phone,telegramName:name});
 
-/* ================= LOAD ================= */
+/* ================= GAME ID SYNC ================= */
+socket.on("game_id",(id)=>{
+  currentGameId=id;
+  audioQueue=[];
+  playing=false;
+});
+
+/* ================= LOAD CARDS ================= */
 socket.on("cards",(cards)=>{
   myCards=cards;
 
-  document.getElementById("cards").innerHTML=
+  document.getElementById("cards").innerHTML =
     cards.map((c,i)=>`
       <div class="card" onclick="pick(${i},this)">
         <b>Card ${i+1}</b>
@@ -95,7 +106,7 @@ socket.on("cards",(cards)=>{
     `).join("");
 });
 
-/* ================= TAKEN ================= */
+/* ================= TAKEN CARDS ================= */
 socket.on("taken",(arr)=>{
   takenCards=arr;
 
@@ -136,6 +147,7 @@ function pick(i,el){
   }
 }
 
+/* ================= CONFIRM ================= */
 function confirmPick(){
 
   if(phase!=="picking"){
@@ -151,7 +163,6 @@ function confirmPick(){
 
 /* ================= PHASE ================= */
 socket.on("phase",(p)=>{
-
   phase=p;
 
   if(p==="picking"){
@@ -170,24 +181,31 @@ socket.on("phase",(p)=>{
   }
 });
 
-/* ================= NUMBER ================= */
-socket.on("number",(n)=>{
-  if(audioEnabled){
-    audioQueue.push(n);
-    if(!playing) playNext();
+/* ================= NUMBER (SYNC FIX) ================= */
+socket.on("number",(data)=>{
+
+  if(data.gameId !== currentGameId) return;
+
+  audioQueue.push(data.value);
+
+  if(!playing){
+    playNext();
   }
 });
 
-/* ================= CALLED ================= */
-socket.on("called",(arr)=>{
-  document.getElementById("called").innerText="Called: "+arr.join(",");
+/* ================= CALLED NUMBERS ================= */
+socket.on("called",(data)=>{
+
+  if(data.gameId !== currentGameId) return;
+
+  document.getElementById("called").innerText =
+    "Called: "+data.list.join(",");
 
   document.querySelectorAll(".cell").forEach(c=>{
     let val=c.innerText;
-    if(val!=="FREE" && arr.includes(Number(val))){
+
+    if(val!=="FREE" && data.list.includes(Number(val))){
       c.classList.add("mark");
-    }else{
-      c.classList.remove("mark");
     }
   });
 });
@@ -199,7 +217,15 @@ socket.on("winner",(w)=>{
   `;
 });
 
-/* ================= END ================= */
+/* ================= STOP AUDIO ================= */
+socket.on("stop_audio",(id)=>{
+  if(id===currentGameId){
+    audioQueue=[];
+    playing=false;
+  }
+});
+
+/* ================= GAME END ================= */
 socket.on("game_end",(m)=>{
   document.getElementById("status").innerText=m;
   selected=[];
