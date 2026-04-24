@@ -44,32 +44,32 @@ let myCards=[];
 let selected=[];
 let audioEnabled=false;
 let phase="waiting";
+let takenCards=[];
 
-/* 🔊 FIXED AUDIO QUEUE */
-let audioQueue = [];
-let playing = false;
+/* 🔊 AUDIO QUEUE (KEEP VOICE WORKING) */
+let audioQueue=[];
+let playing=false;
 
 function playNext(){
-
   if(!audioEnabled) return;
 
-  if(audioQueue.length === 0){
-    playing = false;
+  if(audioQueue.length===0){
+    playing=false;
     return;
   }
 
-  playing = true;
+  playing=true;
 
-  let n = audioQueue.shift();
+  let n=audioQueue.shift();
 
   let letter = n<=15?"B":n<=30?"I":n<=45?"N":n<=60?"G":"O";
 
-  let audio = new Audio(`/voices/${letter}${n}.mp3`);
-  audio.volume = 1;
+  let audio=new Audio(`/voices/${letter}${n}.mp3`);
+  audio.volume=1;
 
   audio.play().catch(()=>{});
 
-  audio.onended = ()=>{
+  audio.onended=()=>{
     setTimeout(playNext,200);
   };
 }
@@ -77,11 +77,7 @@ function playNext(){
 /* ================= SOUND ================= */
 function enableSound(){
   audioEnabled=true;
-
-  // unlock browser audio
   new Audio("/voices/B1.mp3").play().catch(()=>{});
-
-  document.getElementById("status").innerText="🔊 SOUND ENABLED";
 }
 
 /* ================= USER ================= */
@@ -113,11 +109,37 @@ socket.on("cards",(cards)=>{
   document.getElementById("cards").innerHTML=html;
 });
 
+/* ================= TAKEN CARDS ================= */
+socket.on("taken",(arr)=>{
+
+  takenCards=arr;
+
+  document.querySelectorAll(".card").forEach((cardEl,i)=>{
+
+    let str=JSON.stringify(myCards[i]);
+
+    if(takenCards.includes(str)){
+      cardEl.style.opacity="0.3";
+      cardEl.style.pointerEvents="none";
+    }else{
+      cardEl.style.opacity="1";
+      cardEl.style.pointerEvents="auto";
+    }
+  });
+});
+
 /* ================= PICK ================= */
 function pick(i,el){
 
   if(phase !== "picking"){
     alert("⏳ WAIT FOR NEXT GAME");
+    return;
+  }
+
+  let str=JSON.stringify(myCards[i]);
+
+  if(takenCards.includes(str)){
+    alert("❌ Already taken");
     return;
   }
 
@@ -137,7 +159,7 @@ function confirmPick(){
     return;
   }
 
-  if(selected.length === 0){
+  if(selected.length===0){
     alert("Select at least 1 card");
     return;
   }
@@ -151,7 +173,7 @@ function confirmPick(){
 /* ================= PHASE ================= */
 socket.on("phase",(p)=>{
 
-  phase = p;
+  phase=p;
 
   if(p==="picking"){
     document.getElementById("status").innerText="🟢 PICK NOW (30s)";
@@ -179,12 +201,11 @@ socket.on("countdown",(t)=>{
   document.getElementById("status").innerText="Start in "+t;
 });
 
-/* ================= 🔊 NUMBER ================= */
+/* ================= NUMBER ================= */
 socket.on("number",(n)=>{
 
   if(audioEnabled){
     audioQueue.push(n);
-
     if(!playing){
       playNext();
     }
@@ -198,9 +219,9 @@ socket.on("called",(arr)=>{
     "Called: "+arr.join(",");
 
   document.querySelectorAll(".cell").forEach(c=>{
-    let val = c.innerText;
+    let val=c.innerText;
 
-    if(val !== "FREE" && arr.includes(Number(val))){
+    if(val!=="FREE" && arr.includes(Number(val))){
       c.classList.add("mark");
     }
   });
@@ -209,7 +230,7 @@ socket.on("called",(arr)=>{
 /* ================= WINNER ================= */
 socket.on("winner",(w)=>{
 
-  let html = `
+  let html=`
   <h2>🏆 WINNER: ${w.telegramName}</h2>
   <h3>GOOD BINGO</h3>
   <div class="card">
@@ -222,12 +243,12 @@ socket.on("winner",(w)=>{
   </div>
   `;
 
-  document.getElementById("winnerBox").innerHTML = html;
+  document.getElementById("winnerBox").innerHTML=html;
 });
 
 /* ================= END ================= */
 socket.on("game_end",(m)=>{
-  document.getElementById("status").innerText = m;
+  document.getElementById("status").innerText=m;
   selected=[];
 });
 
