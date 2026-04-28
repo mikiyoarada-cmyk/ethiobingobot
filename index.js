@@ -23,13 +23,12 @@ let game = {
   selected:{},
   called:[],
   takenCards:[],
-  winners:[],
   interval:null,
   gameId:0,
-  locked:false
+  lock:false
 };
 
-/* ================= CARDS ================= */
+/* ================= CARD ================= */
 function generateCard(){
   function r(min,max){
     let a=[];
@@ -51,16 +50,17 @@ function generateCard(){
   ];
 }
 
-const globalCards=[...Array(600)].map(()=>generateCard());
+const globalCards = [...Array(600)].map(()=>generateCard());
 
-/* ================= WIN CHECK ================= */
-function isWin(card){
+/* ================= WIN CHECK (ONE WAY ONLY) ================= */
+function isWinner(card){
 
+  // ROW
   for(let r=0;r<5;r++){
-    if(card[r].every(n=>n==="FREE" || game.called.includes(n)))
-      return true;
+    if(card[r].every(n=>n==="FREE" || game.called.includes(n))) return true;
   }
 
+  // COLUMN
   for(let c=0;c<5;c++){
     let ok=true;
     for(let r=0;r<5;r++){
@@ -70,8 +70,8 @@ function isWin(card){
     if(ok) return true;
   }
 
+  // DIAGONAL
   let d1=true,d2=true;
-
   for(let i=0;i<5;i++){
     let a=card[i][i];
     let b=card[i][4-i];
@@ -97,13 +97,14 @@ io.on("connection",(socket)=>{
     socket.emit("game_id",game.gameId);
     socket.emit("cards",globalCards);
     socket.emit("phase",game.phase);
-    socket.emit("called",game.called);
+    socket.emit("called",{list:game.called,gameId:game.gameId});
     socket.emit("taken",game.takenCards);
   });
 
   socket.on("select_cartelas",(data)=>{
 
-    if(game.phase!=="picking") return socket.emit("msg","WAIT");
+    if(game.phase!=="picking")
+      return socket.emit("msg","WAIT");
 
     let chosen=[];
 
@@ -112,7 +113,7 @@ io.on("connection",(socket)=>{
       let str=JSON.stringify(card);
 
       if(game.takenCards.includes(str)){
-        socket.emit("msg","TAKEN");
+        socket.emit("msg","ALREADY TAKEN");
         continue;
       }
 
@@ -143,11 +144,10 @@ function startPickPhase(){
   game.called=[];
   game.selected={};
   game.takenCards=[];
-  game.winners=[];
   game.gameId++;
 
   io.emit("phase","picking");
-  io.emit("called",[]);
+  io.emit("called",{list:[],gameId:game.gameId});
   io.emit("taken",[]);
   io.emit("game_id",game.gameId);
 
@@ -171,8 +171,8 @@ function startGame(){
 
   game.interval=setInterval(()=>{
 
-    if(game.locked) return;
-    game.locked=true;
+    if(game.lock) return;
+    game.lock=true;
 
     let n;
     do{
@@ -185,7 +185,7 @@ function startGame(){
 
     setTimeout(()=>{
       io.emit("called",{list:game.called,gameId:game.gameId});
-      game.locked=false;
+      game.lock=false;
     },700);
 
     checkWinner();
@@ -193,7 +193,7 @@ function startGame(){
   },3000);
 }
 
-/* ================= WINNERS (TOP 3) ================= */
+/* ================= WINNER ================= */
 function checkWinner(){
 
   for(let phone in game.selected){
@@ -202,43 +202,31 @@ function checkWinner(){
 
     for(let card of player.chosen){
 
-      if(isWin(card)){
+      if(isWinner(card)){
 
-        // already winner skip
-        if(game.winners.find(w=>w.phone===phone)) continue;
+        clearInterval(game.interval);
 
-        game.winners.push({
-          phone,
-          name:player.telegramName,
+        io.emit("winner",{
+          telegramName:player.telegramName,
           card
         });
 
-        io.emit("winner_rank",{
-          rank:game.winners.length,
-          name:player.telegramName,
-          card
-        });
-
-        if(game.winners.length===3){
-
-          clearInterval(game.interval);
-
-          endGame();
-          return;
-        }
+        endGame(player.telegramName,card);
+        return;
       }
     }
   }
 }
 
 /* ================= END ================= */
-function endGame(){
+function endGame(name,card){
 
   game.phase="waiting";
-  io.emit("game_end","🏆 TOP 3 COMPLETED");
+  io.emit("game_end","🏆 WINNER: "+name);
 
   game.gameId++;
 
+  // CLEAR DATA
   setTimeout(()=>{
 
     game.called=[];
@@ -249,17 +237,21 @@ function endGame(){
     io.emit("taken",[]);
     io.emit("stop_audio",game.gameId);
 
-    io.emit("final_winners",game.winners);
+    io.emit("winner_final",{
+      name,
+      card
+    });
 
   },1000);
 
+  // AUTO RESTART AFTER 30 SECONDS
   setTimeout(startPickPhase,30000);
 }
 
-/* ================= START ================= */
+/* ================= AUTO START ================= */
 setTimeout(startPickPhase,2000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 TOP 3 BINGO READY");
+  console.log("🚀 FINAL CLEAN BINGO READY");
 });
