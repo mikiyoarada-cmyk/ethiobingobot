@@ -50,17 +50,15 @@ function generateCard(){
   ];
 }
 
-const globalCards = [...Array(600)].map(()=>generateCard());
+const globalCards=[...Array(600)].map(()=>generateCard());
 
-/* ================= WIN CHECK (ONE WAY ONLY) ================= */
+/* ================= WIN ================= */
 function isWinner(card){
 
-  // ROW
   for(let r=0;r<5;r++){
     if(card[r].every(n=>n==="FREE" || game.called.includes(n))) return true;
   }
 
-  // COLUMN
   for(let c=0;c<5;c++){
     let ok=true;
     for(let r=0;r<5;r++){
@@ -70,12 +68,10 @@ function isWinner(card){
     if(ok) return true;
   }
 
-  // DIAGONAL
   let d1=true,d2=true;
   for(let i=0;i<5;i++){
     let a=card[i][i];
     let b=card[i][4-i];
-
     if(a!=="FREE" && !game.called.includes(a)) d1=false;
     if(b!=="FREE" && !game.called.includes(b)) d2=false;
   }
@@ -103,19 +99,14 @@ io.on("connection",(socket)=>{
 
   socket.on("select_cartelas",(data)=>{
 
-    if(game.phase!=="picking")
-      return socket.emit("msg","WAIT");
+    if(game.phase!=="picking") return;
 
     let chosen=[];
 
     for(let card of data.cards){
-
       let str=JSON.stringify(card);
 
-      if(game.takenCards.includes(str)){
-        socket.emit("msg","ALREADY TAKEN");
-        continue;
-      }
+      if(game.takenCards.includes(str)) continue;
 
       game.takenCards.push(str);
       chosen.push(card);
@@ -156,10 +147,18 @@ function startPickPhase(){
   let timer=setInterval(()=>{
     io.emit("countdown",t);
     t--;
+
     if(t<0){
       clearInterval(timer);
+
+      // ❌ DO NOT START IF NO ONE PICKED
+      if(Object.keys(game.selected).length === 0){
+        return startPickPhase();
+      }
+
       startGame();
     }
+
   },1000);
 }
 
@@ -193,7 +192,7 @@ function startGame(){
   },3000);
 }
 
-/* ================= WINNER ================= */
+/* ================= WIN ================= */
 function checkWinner(){
 
   for(let phone in game.selected){
@@ -211,7 +210,7 @@ function checkWinner(){
           card
         });
 
-        endGame(player.telegramName,card);
+        endGame();
         return;
       }
     }
@@ -219,14 +218,13 @@ function checkWinner(){
 }
 
 /* ================= END ================= */
-function endGame(name,card){
+function endGame(){
 
   game.phase="waiting";
-  io.emit("game_end","🏆 WINNER: "+name);
+  io.emit("game_end","🏆 GAME OVER");
 
   game.gameId++;
 
-  // CLEAR DATA
   setTimeout(()=>{
 
     game.called=[];
@@ -237,21 +235,18 @@ function endGame(name,card){
     io.emit("taken",[]);
     io.emit("stop_audio",game.gameId);
 
-    io.emit("winner_final",{
-      name,
-      card
-    });
+    // 🔥 FORCE CLIENT CLEAR MARKS
+    io.emit("reset_board");
 
   },1000);
 
-  // AUTO RESTART AFTER 30 SECONDS
   setTimeout(startPickPhase,30000);
 }
 
-/* ================= AUTO START ================= */
+/* ================= START ================= */
 setTimeout(startPickPhase,2000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL CLEAN BINGO READY");
+  console.log("🚀 FINAL PERFECT BINGO READY");
 });
