@@ -1,12 +1,19 @@
 require("dotenv").config();
+const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+const app = express();
+app.use(express.json());
 
-const ADMIN_ID = Number(process.env.ADMIN_ID); // IMPORTANT FIX
+/* ================= CONFIG ================= */
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const ADMIN_ID = Number(process.env.ADMIN_ID);
 const TELEBIRR_NUMBER = "0904489434";
 
-/* ================= USERS ================= */
+/* ================= BOT (WEBHOOK MODE) ================= */
+const bot = new TelegramBot(BOT_TOKEN);
+
+/* ================= USERS DB ================= */
 let users = {};
 
 /* ================= START ================= */
@@ -17,7 +24,7 @@ bot.onText(/\/start/, (msg) => {
   bot.sendMessage(chatId,
 `🎯 BINGO GAME
 
-Click PLAY to start`,
+Press PLAY to start`,
 {
     reply_markup: {
       inline_keyboard: [
@@ -27,16 +34,13 @@ Click PLAY to start`,
   });
 });
 
-/* ================= BUTTONS ================= */
+/* ================= CALLBACK ================= */
 bot.on("callback_query", (query) => {
 
   const chatId = query.message?.chat?.id;
   if (!chatId) return;
 
-  const data = query.data;
-
-  /* PLAY */
-  if (data === "play") {
+  if (query.data === "play") {
 
     users[chatId] = users[chatId] || {
       paid: false,
@@ -47,48 +51,14 @@ bot.on("callback_query", (query) => {
     bot.sendMessage(chatId,
 `💰 PAYMENT REQUIRED
 
-Send to TeleBirr:
-📱 ${TELEBIRR_NUMBER}
+Send TeleBirr payment:
+${TELEBIRR_NUMBER}
 
 Then send TXID here`);
   }
-
-  /* APPROVE */
-  if (data.startsWith("approve_")) {
-
-    const userId = Number(data.split("_")[1]);
-
-    if (users[userId]) {
-      users[userId].approved = true;
-      users[userId].paid = true;
-
-      bot.sendMessage(userId, "✅ PAYMENT APPROVED. YOU CAN PLAY NOW");
-
-      if (ADMIN_ID) {
-        bot.sendMessage(ADMIN_ID, "APPROVED USER: " + userId);
-      }
-    }
-  }
-
-  /* REJECT */
-  if (data.startsWith("reject_")) {
-
-    const userId = Number(data.split("_")[1]);
-
-    if (users[userId]) {
-      users[userId].approved = false;
-      users[userId].paid = false;
-
-      bot.sendMessage(userId, "❌ PAYMENT REJECTED");
-
-      if (ADMIN_ID) {
-        bot.sendMessage(ADMIN_ID, "REJECTED USER: " + userId);
-      }
-    }
-  }
 });
 
-/* ================= TXID ================= */
+/* ================= MESSAGE ================= */
 bot.on("message", (msg) => {
 
   const chatId = msg.chat.id;
@@ -98,22 +68,21 @@ bot.on("message", (msg) => {
 
   users[chatId] = users[chatId] || {
     paid: false,
-    approved: false,
-    txid: null
+    approved: false
   };
 
   users[chatId].txid = text;
   users[chatId].paid = true;
 
-  bot.sendMessage(chatId, "📩 TXID RECEIVED. WAIT FOR APPROVAL");
+  bot.sendMessage(chatId, "📩 TXID RECEIVED. WAIT APPROVAL");
 
   if (ADMIN_ID) {
     bot.sendMessage(ADMIN_ID,
-`💰 PAYMENT REQUEST
+`💰 NEW PAYMENT
 
 USER: ${chatId}
 TXID: ${text}
-PAY: ${TELEBIRR_NUMBER}`,
+PAYMENT: ${TELEBIRR_NUMBER}`,
 {
       reply_markup: {
         inline_keyboard: [
@@ -127,9 +96,54 @@ PAY: ${TELEBIRR_NUMBER}`,
   }
 });
 
-/* ================= EXPORT ================= */
-function isApproved(userId) {
-  return users[userId]?.approved === true;
-}
+/* ================= ADMIN ACTIONS ================= */
+bot.on("callback_query", (query) => {
 
-module.exports = { bot, isApproved };
+  const data = query.data;
+  const chatId = query.message?.chat?.id;
+
+  if (!data || !chatId) return;
+
+  if (data.startsWith("approve_")) {
+
+    const userId = Number(data.split("_")[1]);
+
+    if (users[userId]) {
+      users[userId].approved = true;
+
+      bot.sendMessage(userId, "✅ PAYMENT APPROVED. YOU CAN PLAY NOW");
+
+      if (ADMIN_ID) {
+        bot.sendMessage(ADMIN_ID, "APPROVED: " + userId);
+      }
+    }
+  }
+
+  if (data.startsWith("reject_")) {
+
+    const userId = Number(data.split("_")[1]);
+
+    if (users[userId]) {
+      users[userId].approved = false;
+
+      bot.sendMessage(userId, "❌ PAYMENT REJECTED");
+
+      if (ADMIN_ID) {
+        bot.sendMessage(ADMIN_ID, "REJECTED: " + userId);
+      }
+    }
+  }
+});
+
+/* ================= WEBHOOK ================= */
+app.post("/bot", (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
+/* ================= SERVER ================= */
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log("🤖 BOT RUNNING ON PORT", PORT);
+});
