@@ -5,6 +5,8 @@ const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 
+const users = require("./auth");
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -12,6 +14,7 @@ const io = new Server(server);
 app.use(express.static("public"));
 app.use(express.json());
 
+/* ================= MONGOOSE ================= */
 mongoose.connect(process.env.MONGODB_URI)
 .then(()=>console.log("MongoDB connected"))
 .catch(console.log);
@@ -52,7 +55,7 @@ function generateCard(){
 
 const globalCards=[...Array(600)].map(()=>generateCard());
 
-/* ================= WIN CHECK (STRICT ONE LINE ONLY) ================= */
+/* ================= WIN CHECK ================= */
 function isWin(card){
 
   for(let r=0;r<5;r++){
@@ -87,13 +90,17 @@ io.on("connection",(socket)=>{
 
   socket.on("join",(data)=>{
 
+    // 🔐 BLOCK UNPAID USERS
+    if(!users[data.phone] || !users[data.phone].approved){
+      return socket.emit("blocked","PAY FIRST");
+    }
+
     game.players[data.phone]={
       socketId:socket.id,
       telegramName:data.telegramName,
       cards:globalCards
     };
 
-    socket.emit("game_id",game.gameId);
     socket.emit("cards",globalCards);
     socket.emit("phase",game.phase);
     socket.emit("called",game.called);
@@ -102,7 +109,7 @@ io.on("connection",(socket)=>{
 
   socket.on("select_cartelas",(data)=>{
 
-    if(game.phase!=="picking") return socket.emit("msg","WAIT");
+    if(game.phase!=="picking") return;
 
     let chosen=[];
 
@@ -110,10 +117,7 @@ io.on("connection",(socket)=>{
 
       let str=JSON.stringify(card);
 
-      if(game.takenCards.includes(str)){
-        socket.emit("msg","ALREADY TAKEN");
-        continue;
-      }
+      if(game.takenCards.includes(str)) continue;
 
       game.takenCards.push(str);
       chosen.push(card);
@@ -212,14 +216,14 @@ function checkWinner(){
           card
         });
 
-        endGame(player.telegramName, card);
+        endGame(player.telegramName,card);
         return;
       }
     }
   }
 }
 
-/* ================= END GAME ================= */
+/* ================= END ================= */
 function endGame(name,card){
 
   game.phase="waiting";
@@ -227,7 +231,6 @@ function endGame(name,card){
 
   game.gameId++;
 
-  // CLEAR EVERYTHING IMMEDIATELY
   setTimeout(()=>{
 
     game.called=[];
@@ -236,20 +239,11 @@ function endGame(name,card){
 
     io.emit("called",{list:[],gameId:game.gameId});
     io.emit("taken",[]);
-    io.emit("stop_audio",game.gameId);
-
-    // show winner card clearly
-    io.emit("winner_final",{
-      name,
-      card
-    });
+    io.emit("reset");
 
   },1000);
 
-  // AUTO RESTART AFTER 30 SECONDS
-  setTimeout(()=>{
-    startPickPhase();
-  },30000);
+  setTimeout(startPickPhase,30000);
 }
 
 /* ================= START ================= */
@@ -257,5 +251,5 @@ setTimeout(startPickPhase,2000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL STABLE BINGO SYSTEM READY");
+  console.log("🚀 BINGO SYSTEM READY");
 });

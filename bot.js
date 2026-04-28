@@ -1,82 +1,73 @@
 require("dotenv").config();
 const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
+const users = require("./auth");
 
 const app = express();
 app.use(express.json());
 
-const BOT_TOKEN = process.env.BOT_TOKEN;
+const bot = new TelegramBot(process.env.BOT_TOKEN);
 const ADMIN_ID = Number(process.env.ADMIN_ID);
+const TELEBIRR = "0904489434";
 
-const TELEBIRR_NUMBER = "0904489434";
-
-/* ================= BOT ================= */
-const bot = new TelegramBot(BOT_TOKEN);
-
-/* ================= USERS ================= */
-let users = {};
-
-/* ================= START ================= */
-bot.onText(/\/start/, (msg) => {
+/* START */
+bot.onText(/\/start/, (msg)=>{
 
   bot.sendMessage(msg.chat.id,
-`🎯 BINGO GAME
-
-Click PLAY to continue`,
+`🎯 BINGO GAME`,
 {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🎮 PLAY", callback_data: "play" }]
+    reply_markup:{
+      inline_keyboard:[
+        [{text:"🎮 PLAY",callback_data:"play"}]
       ]
     }
   });
 });
 
-/* ================= PLAY ================= */
-bot.on("callback_query", (q) => {
+/* PLAY */
+bot.on("callback_query",(q)=>{
 
-  const chatId = q.message?.chat?.id;
-  if (!chatId) return;
+  const id=q.message.chat.id;
 
-  if (q.data === "play") {
+  if(q.data==="play"){
 
-    users[chatId] = { paid:false, approved:false };
+    users[id]={approved:false};
 
-    bot.sendMessage(chatId,
-`💰 PAY TO PLAY
-
+    bot.sendMessage(id,
+`💰 PAY TO JOIN
 Send to TeleBirr:
-${TELEBIRR_NUMBER}
+${TELEBIRR}
 
 Then send TXID`);
   }
 });
 
-/* ================= TXID ================= */
-bot.on("message", (msg) => {
+/* TXID */
+bot.on("message",(msg)=>{
 
-  const chatId = msg.chat.id;
-  const text = msg.text;
+  if(!msg.text || msg.text.startsWith("/")) return;
 
-  if (!text || text.startsWith("/")) return;
+  const id=msg.chat.id;
 
-  users[chatId] = users[chatId] || {};
-  users[chatId].txid = text;
+  users[id]=users[id]||{};
 
-  bot.sendMessage(chatId, "📩 TXID RECEIVED");
+  users[id].txid=msg.text;
+  users[id].approved=true;
 
-  if (ADMIN_ID) {
+  bot.sendMessage(id,"📩 TXID RECEIVED");
+
+  if(ADMIN_ID){
+
     bot.sendMessage(ADMIN_ID,
-`💰 NEW PAYMENT
-
-USER: ${chatId}
-TXID: ${text}`,
+`NEW PAYMENT
+USER: ${id}
+TXID: ${msg.text}`,
 {
-      reply_markup: {
-        inline_keyboard: [
+      reply_markup:{
+        inline_keyboard:[
           [
-            { text: "✅ APPROVE", callback_data: "approve_" + chatId },
-            { text: "❌ REJECT", callback_data: "reject_" + chatId }
+            {text:"APPROVE",callback_data:"ok_"+id},
+            {text:"REJECT",callback_data:"no_"+id}
           ]
         ]
       }
@@ -84,38 +75,30 @@ TXID: ${text}`,
   }
 });
 
-/* ================= ADMIN ================= */
-bot.on("callback_query", (q) => {
+/* ADMIN */
+bot.on("callback_query",(q)=>{
 
-  const data = q.data;
+  const d=q.data;
 
-  if (data.startsWith("approve_")) {
-
-    const id = Number(data.split("_")[1]);
-    users[id].approved = true;
-
-    bot.sendMessage(id, "✅ APPROVED");
+  if(d.startsWith("ok_")){
+    const id=d.split("_")[1];
+    users[id].approved=true;
+    bot.sendMessage(id,"✅ APPROVED - YOU CAN PLAY");
   }
 
-  if (data.startsWith("reject_")) {
-
-    const id = Number(data.split("_")[1]);
-    users[id].approved = false;
-
-    bot.sendMessage(id, "❌ REJECTED");
+  if(d.startsWith("no_")){
+    const id=d.split("_")[1];
+    users[id].approved=false;
+    bot.sendMessage(id,"❌ REJECTED");
   }
 });
 
-/* ================= WEBHOOK ROUTE (FIX) ================= */
-/* THIS IS THE MOST IMPORTANT PART */
-app.post("/webhook", (req, res) => {
+/* WEBHOOK */
+app.post("/webhook",(req,res)=>{
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-/* ================= SERVER ================= */
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log("BOT RUNNING ON PORT", PORT);
+app.listen(process.env.PORT||3000,()=>{
+  console.log("BOT RUNNING");
 });
