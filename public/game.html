@@ -86,12 +86,12 @@ socket.on("cards",(cards)=>{
 function pick(i,el){
 
   if(phase !== "picking"){
-    alert("⏳ WAIT NEXT GAME");
+    alert("WAIT NEXT GAME");
     return;
   }
 
   if(el.classList.contains("taken")){
-    alert("❌ ALREADY TAKEN");
+    alert("ALREADY TAKEN");
     return;
   }
 
@@ -107,12 +107,12 @@ function pick(i,el){
 function confirmPick(){
 
   if(phase !== "picking"){
-    alert("⏳ WAIT NEXT GAME");
+    alert("WAIT NEXT GAME");
     return;
   }
 
   if(selected.length===0){
-    alert("Select at least 1 card");
+    alert("Select cards");
     return;
   }
 
@@ -125,10 +125,10 @@ function confirmPick(){
 /* ================= PHASE ================= */
 socket.on("phase",(p)=>{
 
-  phase = p;
+  phase=p;
 
   if(p==="picking"){
-    document.getElementById("status").innerText="🟢 PICK NOW (30s)";
+    document.getElementById("status").innerText="PICK NOW";
     document.getElementById("winnerBox").innerHTML="";
     selected=[];
 
@@ -143,11 +143,11 @@ socket.on("phase",(p)=>{
   }
 
   if(p==="playing"){
-    document.getElementById("status").innerText="🎮 GAME STARTED";
+    document.getElementById("status").innerText="GAME STARTED";
   }
 
   if(p==="waiting"){
-    document.getElementById("status").innerText="⏳ WAIT NEXT GAME";
+    document.getElementById("status").innerText="WAIT NEXT GAME";
   }
 });
 
@@ -161,8 +161,7 @@ socket.on("taken",(list)=>{
 
   document.querySelectorAll(".card").forEach((cardEl,i)=>{
 
-    let card=myCards[i];
-    let str=JSON.stringify(card);
+    let str=JSON.stringify(myCards[i]);
 
     if(list.includes(str)){
       cardEl.classList.add("taken");
@@ -211,27 +210,20 @@ socket.on("called",(data)=>{
 /* ================= WINNER ================= */
 socket.on("winner",(w)=>{
 
-  let html=`
-  <h2>🏆 WINNER: ${w.telegramName}</h2>
-  <div class="card">
-    <div class="header">
-      <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
+  document.getElementById("winnerBox").innerHTML=`
+    <h2>WINNER: ${w.telegramName}</h2>
+    <div class="card">
+      <div class="header">
+        <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
+      </div>
+      <div class="grid">
+        ${w.card.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
+      </div>
     </div>
-    <div class="grid">
-      ${w.card.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
-    </div>
-  </div>
   `;
-
-  document.getElementById("winnerBox").innerHTML=html;
 });
 
-/* ================= END ================= */
-socket.on("game_end",(m)=>{
-  document.getElementById("status").innerText=m;
-});
-
-/* ================= RESET BOARD ================= */
+/* ================= RESET ================= */
 socket.on("reset_board",()=>{
 
   document.getElementById("called").innerText="";

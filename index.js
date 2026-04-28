@@ -3,7 +3,6 @@ require("dotenv").config();
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-const mongoose = require("mongoose");
 
 const app = express();
 const server = http.createServer(app);
@@ -12,11 +11,9 @@ const io = new Server(server);
 app.use(express.static("public"));
 app.use(express.json());
 
-mongoose.connect(process.env.MONGODB_URI)
-.then(()=>console.log("MongoDB connected"))
-.catch(console.log);
+/* ================= PAYMENT + GAME STATE ================= */
+let users = {}; // phone -> user data
 
-/* ================= GAME ================= */
 let game = {
   phase:"waiting",
   players:{},
@@ -24,11 +21,10 @@ let game = {
   called:[],
   takenCards:[],
   interval:null,
-  gameId:0,
-  lock:false
+  gameId:0
 };
 
-/* ================= CARD ================= */
+/* ================= CARDS ================= */
 function generateCard(){
   function r(min,max){
     let a=[];
@@ -69,9 +65,11 @@ function isWinner(card){
   }
 
   let d1=true,d2=true;
+
   for(let i=0;i<5;i++){
     let a=card[i][i];
     let b=card[i][4-i];
+
     if(a!=="FREE" && !game.called.includes(a)) d1=false;
     if(b!=="FREE" && !game.called.includes(b)) d2=false;
   }
@@ -82,28 +80,95 @@ function isWinner(card){
 /* ================= SOCKET ================= */
 io.on("connection",(socket)=>{
 
+  /* ===== JOIN ===== */
   socket.on("join",(data)=>{
 
-    game.players[data.phone]={
-      socketId:socket.id,
-      telegramName:data.telegramName,
-      cards:globalCards
-    };
+    let user = users[data.phone];
 
-    socket.emit("game_id",game.gameId);
-    socket.emit("cards",globalCards);
+    if(!user){
+      users[data.phone]={
+        phone:data.phone,
+        telegramName:data.telegramName,
+        paid:false,
+        approved:false,
+        txid:null
+      };
+      user = users[data.phone];
+    }
+
+    socket.emit("payment_status",user);
+
+    // ONLY APPROVED USERS GET FULL ACCESS
+    if(user.approved){
+
+      game.players[data.phone]={
+        socketId:socket.id,
+        telegramName:data.telegramName,
+        cards:globalCards
+      };
+
+      socket.emit("cards",globalCards);
+    }
+
     socket.emit("phase",game.phase);
     socket.emit("called",{list:game.called,gameId:game.gameId});
-    socket.emit("taken",game.takenCards);
   });
 
+  /* ===== PAYMENT SUBMIT ===== */
+  socket.on("pay",(data)=>{
+
+    if(!users[data.phone]){
+      users[data.phone]={
+        phone:data.phone,
+        telegramName:data.telegramName
+      };
+    }
+
+    users[data.phone].txid = data.txid;
+    users[data.phone].paid = true;
+    users[data.phone].approved = false;
+
+    socket.emit("payment_status",users[data.phone]);
+
+    io.emit("admin_pay_request",users[data.phone]);
+  });
+
+  /* ===== ADMIN APPROVE ===== */
+  socket.on("approve",(phone)=>{
+
+    if(users[phone]){
+      users[phone].approved = true;
+
+      io.emit("payment_status_update",users[phone]);
+    }
+  });
+
+  /* ===== ADMIN REJECT ===== */
+  socket.on("reject",(phone)=>{
+
+    if(users[phone]){
+      users[phone].paid = false;
+      users[phone].txid = null;
+
+      io.emit("payment_status_update",users[phone]);
+    }
+  });
+
+  /* ===== SELECT CARDS ===== */
   socket.on("select_cartelas",(data)=>{
+
+    let user = users[data.phone];
+
+    if(!user || !user.approved){
+      return socket.emit("msg","PAY 10 ETB FIRST");
+    }
 
     if(game.phase!=="picking") return;
 
     let chosen=[];
 
     for(let card of data.cards){
+
       let str=JSON.stringify(card);
 
       if(game.takenCards.includes(str)) continue;
@@ -124,7 +189,9 @@ io.on("connection",(socket)=>{
 /* ================= PICK ================= */
 function startPickPhase(){
 
-  if(Object.keys(game.players).length < 2){
+  let activeUsers = Object.values(users).filter(u=>u.approved);
+
+  if(activeUsers.length < 2){
     game.phase="waiting";
     io.emit("phase","waiting");
     setTimeout(startPickPhase,3000);
@@ -145,14 +212,14 @@ function startPickPhase(){
   let t=30;
 
   let timer=setInterval(()=>{
+
     io.emit("countdown",t);
     t--;
 
     if(t<0){
       clearInterval(timer);
 
-      // ❌ DO NOT START IF NO ONE PICKED
-      if(Object.keys(game.selected).length === 0){
+      if(Object.keys(game.selected).length===0){
         return startPickPhase();
       }
 
@@ -170,9 +237,6 @@ function startGame(){
 
   game.interval=setInterval(()=>{
 
-    if(game.lock) return;
-    game.lock=true;
-
     let n;
     do{
       n=Math.floor(Math.random()*75)+1;
@@ -181,18 +245,14 @@ function startGame(){
     game.called.push(n);
 
     io.emit("number",{value:n,gameId:game.gameId});
-
-    setTimeout(()=>{
-      io.emit("called",{list:game.called,gameId:game.gameId});
-      game.lock=false;
-    },700);
+    io.emit("called",{list:game.called,gameId:game.gameId});
 
     checkWinner();
 
   },3000);
 }
 
-/* ================= WIN ================= */
+/* ================= WINNER ================= */
 function checkWinner(){
 
   for(let phone in game.selected){
@@ -233,9 +293,6 @@ function endGame(){
 
     io.emit("called",{list:[],gameId:game.gameId});
     io.emit("taken",[]);
-    io.emit("stop_audio",game.gameId);
-
-    // 🔥 FORCE CLIENT CLEAR MARKS
     io.emit("reset_board");
 
   },1000);
@@ -248,5 +305,5 @@ setTimeout(startPickPhase,2000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL PERFECT BINGO READY");
+  console.log("🚀 TELEBIRR BINGO SYSTEM READY");
 });
