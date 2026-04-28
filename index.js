@@ -16,13 +16,14 @@ mongoose.connect(process.env.MONGODB_URI)
 .then(()=>console.log("MongoDB connected"))
 .catch(console.log);
 
-/* ================= GAME STATE ================= */
+/* ================= GAME ================= */
 let game = {
   phase:"waiting",
   players:{},
   selected:{},
   called:[],
   takenCards:[],
+  winners:[],
   interval:null,
   gameId:0,
   locked:false
@@ -52,7 +53,7 @@ function generateCard(){
 
 const globalCards=[...Array(600)].map(()=>generateCard());
 
-/* ================= WIN CHECK (STRICT ONE LINE ONLY) ================= */
+/* ================= WIN CHECK ================= */
 function isWin(card){
 
   for(let r=0;r<5;r++){
@@ -111,7 +112,7 @@ io.on("connection",(socket)=>{
       let str=JSON.stringify(card);
 
       if(game.takenCards.includes(str)){
-        socket.emit("msg","ALREADY TAKEN");
+        socket.emit("msg","TAKEN");
         continue;
       }
 
@@ -128,7 +129,7 @@ io.on("connection",(socket)=>{
   });
 });
 
-/* ================= PICK PHASE ================= */
+/* ================= PICK ================= */
 function startPickPhase(){
 
   if(Object.keys(game.players).length < 2){
@@ -142,6 +143,7 @@ function startPickPhase(){
   game.called=[];
   game.selected={};
   game.takenCards=[];
+  game.winners=[];
   game.gameId++;
 
   io.emit("phase","picking");
@@ -152,19 +154,16 @@ function startPickPhase(){
   let t=30;
 
   let timer=setInterval(()=>{
-
     io.emit("countdown",t);
     t--;
-
     if(t<0){
       clearInterval(timer);
       startGame();
     }
-
   },1000);
 }
 
-/* ================= GAME LOOP ================= */
+/* ================= GAME ================= */
 function startGame(){
 
   game.phase="playing";
@@ -194,7 +193,7 @@ function startGame(){
   },3000);
 }
 
-/* ================= WINNER ================= */
+/* ================= WINNERS (TOP 3) ================= */
 function checkWinner(){
 
   for(let phone in game.selected){
@@ -205,29 +204,41 @@ function checkWinner(){
 
       if(isWin(card)){
 
-        clearInterval(game.interval);
+        // already winner skip
+        if(game.winners.find(w=>w.phone===phone)) continue;
 
-        io.emit("winner",{
-          telegramName:player.telegramName,
+        game.winners.push({
+          phone,
+          name:player.telegramName,
           card
         });
 
-        endGame(player.telegramName, card);
-        return;
+        io.emit("winner_rank",{
+          rank:game.winners.length,
+          name:player.telegramName,
+          card
+        });
+
+        if(game.winners.length===3){
+
+          clearInterval(game.interval);
+
+          endGame();
+          return;
+        }
       }
     }
   }
 }
 
-/* ================= END GAME ================= */
-function endGame(name,card){
+/* ================= END ================= */
+function endGame(){
 
   game.phase="waiting";
-  io.emit("game_end","🏆 WINNER: "+name);
+  io.emit("game_end","🏆 TOP 3 COMPLETED");
 
   game.gameId++;
 
-  // CLEAR EVERYTHING IMMEDIATELY
   setTimeout(()=>{
 
     game.called=[];
@@ -238,18 +249,11 @@ function endGame(name,card){
     io.emit("taken",[]);
     io.emit("stop_audio",game.gameId);
 
-    // show winner card clearly
-    io.emit("winner_final",{
-      name,
-      card
-    });
+    io.emit("final_winners",game.winners);
 
   },1000);
 
-  // AUTO RESTART AFTER 30 SECONDS
-  setTimeout(()=>{
-    startPickPhase();
-  },30000);
+  setTimeout(startPickPhase,30000);
 }
 
 /* ================= START ================= */
@@ -257,5 +261,5 @@ setTimeout(startPickPhase,2000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL STABLE BINGO SYSTEM READY");
+  console.log("🚀 TOP 3 BINGO READY");
 });
