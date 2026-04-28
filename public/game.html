@@ -26,6 +26,9 @@ body{font-family:Arial;text-align:center;background:#f5f5f5}
 <body>
 
 <h2>🎯 BINGO GAME</h2>
+
+<h3>💰 Pay 10 ETB to: 0904489434</h3>
+
 <h3 id="status"></h3>
 <h3 id="called"></h3>
 
@@ -59,7 +62,7 @@ let name=prompt("Enter Telegram Name");
 
 socket.emit("join",{phone,telegramName:name});
 
-/* ================= LOAD ================= */
+/* ================= LOAD CARDS ================= */
 socket.on("cards",(cards)=>{
 
   myCards=cards;
@@ -111,11 +114,6 @@ function confirmPick(){
     return;
   }
 
-  if(selected.length===0){
-    alert("Select cards");
-    return;
-  }
-
   socket.emit("select_cartelas",{
     phone,
     cards:selected.map(i=>myCards[i])
@@ -156,7 +154,7 @@ socket.on("game_id",(id)=>{
   currentGameId=id;
 });
 
-/* ================= TAKEN ================= */
+/* ================= TAKEN CARDS ================= */
 socket.on("taken",(list)=>{
 
   document.querySelectorAll(".card").forEach((cardEl,i)=>{
@@ -211,7 +209,7 @@ socket.on("called",(data)=>{
 socket.on("winner",(w)=>{
 
   document.getElementById("winnerBox").innerHTML=`
-    <h2>WINNER: ${w.telegramName}</h2>
+    <h2>🏆 WINNER: ${w.telegramName}</h2>
     <div class="card">
       <div class="header">
         <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
