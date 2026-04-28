@@ -7,46 +7,55 @@ app.use(express.json());
 
 const bot = new TelegramBot(process.env.BOT_TOKEN);
 
-/* START */
-bot.onText(/\/start/, (msg)=>{
+/* ================= START ================= */
+bot.onText(/\/start/, (msg) => {
 
   bot.sendMessage(msg.chat.id,
-`🎯 BINGO GAME`,
+`🎯 BINGO GAME
+
+Welcome!`,
 {
-    reply_markup:{
-      inline_keyboard:[
-        [{text:"🎮 PLAY",callback_data:"play"}]
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🎮 PLAY", callback_data: "play" }]
       ]
     }
   });
 });
 
-/* PLAY */
-bot.on("callback_query",(q)=>{
+/* ================= PLAY BUTTON ================= */
+bot.on("callback_query", (q) => {
 
-  if(q.data==="play"){
+  if (q.data === "play") {
+
     bot.sendMessage(q.message.chat.id,
-`💰 PAY TO PLAY
-Send TXID after payment`);
+`💰 PAY TO JOIN
+
+Send TXID after payment.`);
   }
 });
 
-/* TXID */
-bot.on("message",(msg)=>{
+/* ================= TEXT / TXID ================= */
+bot.on("message", (msg) => {
 
-  if(!msg.text || msg.text.startsWith("/")) return;
+  if (!msg.text || msg.text.startsWith("/")) return;
 
-  bot.sendMessage(msg.chat.id,"📩 TXID RECEIVED");
+  bot.sendMessage(msg.chat.id, "📩 TXID RECEIVED");
 });
 
-/* ✅ CORRECT WEBHOOK ROUTE */
-app.post("/webhook",(req,res)=>{
+/* ================= WEBHOOK (FIX FOR 404) ================= */
+app.post("/webhook", (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-/* SERVER */
+/* ================= TEST ROUTE ================= */
+app.get("/", (req, res) => {
+  res.send("BOT IS RUNNING OK");
+});
+
+/* ================= SERVER ================= */
 const PORT = process.env.PORT || 3000;
-app.listen(PORT,()=>{
-  console.log("BOT RUNNING");
+app.listen(PORT, () => {
+  console.log("BOT RUNNING ON PORT", PORT);
 });
