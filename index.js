@@ -5,6 +5,8 @@ const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 
+const auth = require("./auth");
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -84,6 +86,13 @@ io.on("connection",(socket)=>{
 
   socket.on("join",(data)=>{
 
+    const user = auth.users[data.phone];
+
+    // 🔒 BLOCK UNPAID USERS
+    if(!user || !user.approved){
+      return socket.emit("msg","💰 PAY 10 ETB FIRST TO 0904489434");
+    }
+
     game.players[data.phone]={
       socketId:socket.id,
       telegramName:data.telegramName,
@@ -151,7 +160,6 @@ function startPickPhase(){
     if(t<0){
       clearInterval(timer);
 
-      // ❌ DO NOT START IF NO ONE PICKED
       if(Object.keys(game.selected).length === 0){
         return startPickPhase();
       }
@@ -210,7 +218,7 @@ function checkWinner(){
           card
         });
 
-        endGame();
+        endGame(player.telegramName,card);
         return;
       }
     }
@@ -218,10 +226,10 @@ function checkWinner(){
 }
 
 /* ================= END ================= */
-function endGame(){
+function endGame(name,card){
 
   game.phase="waiting";
-  io.emit("game_end","🏆 GAME OVER");
+  io.emit("game_end","🏆 WINNER: "+name);
 
   game.gameId++;
 
@@ -234,9 +242,9 @@ function endGame(){
     io.emit("called",{list:[],gameId:game.gameId});
     io.emit("taken",[]);
     io.emit("stop_audio",game.gameId);
-
-    // 🔥 FORCE CLIENT CLEAR MARKS
     io.emit("reset_board");
+
+    io.emit("winner_final",{name,card});
 
   },1000);
 
@@ -248,5 +256,5 @@ setTimeout(startPickPhase,2000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 FINAL PERFECT BINGO READY");
+  console.log("🚀 FINAL BINGO + PAYMENT LOCK READY");
 });
