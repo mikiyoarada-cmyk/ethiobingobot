@@ -11,9 +11,7 @@ app.use(express.json());
 const bot = new TelegramBot(process.env.BOT_TOKEN);
 
 const ADMIN_ID = Number(process.env.ADMIN_ID);
-
-// 🔥 YOUR TELEBIRR NUMBER
-const TELEBIRR_NUMBER = "0904489434";
+const TELEBIRR = "0904489434";
 
 /* ================= START ================= */
 bot.onText(/\/start/, (msg) => {
@@ -21,7 +19,7 @@ bot.onText(/\/start/, (msg) => {
   bot.sendMessage(msg.chat.id,
 `🎯 BINGO GAME
 
-Click PLAY to join`,
+Click PLAY`,
 {
   reply_markup:{
     inline_keyboard:[
@@ -37,44 +35,33 @@ bot.on("callback_query",(q)=>{
   const chatId = q.message?.chat?.id;
   if(!chatId) return;
 
-  // PLAY
   if(q.data === "play"){
-
     auth.users[chatId] = { approved:false };
 
     bot.sendMessage(chatId,
-`💰 PAY TO PLAY
+`💰 PAY 10 ETB
 
-Send to TeleBirr:
-📱 ${TELEBIRR_NUMBER}
+TeleBirr:
+📱 ${TELEBIRR}
 
-Minimum: 10 ETB
-
-After payment send TXID`);
+Send TXID after payment`);
   }
 
-  // APPROVE
   if(q.data.startsWith("ok_")){
-
     const id = q.data.split("_")[1];
-
     auth.users[id] = { approved:true };
 
-    bot.sendMessage(id,"✅ PAYMENT APPROVED — YOU CAN PLAY");
+    bot.sendMessage(id,"✅ APPROVED");
     bot.sendMessage(chatId,"✔ Approved");
   }
 
-  // REJECT
   if(q.data.startsWith("no_")){
-
     const id = q.data.split("_")[1];
-
     auth.users[id] = { approved:false };
 
-    bot.sendMessage(id,"❌ PAYMENT REJECTED");
+    bot.sendMessage(id,"❌ REJECTED");
     bot.sendMessage(chatId,"❌ Rejected");
   }
-
 });
 
 /* ================= TXID ================= */
@@ -88,12 +75,11 @@ bot.on("message",(msg)=>{
   auth.users[chatId] = auth.users[chatId] || {};
   auth.users[chatId].txid = text;
 
-  bot.sendMessage(chatId,"📩 TXID RECEIVED — WAIT FOR APPROVAL");
+  bot.sendMessage(chatId,"📩 TXID RECEIVED");
 
-  // SEND TO ADMIN
   if(ADMIN_ID){
     bot.sendMessage(ADMIN_ID,
-`💰 NEW PAYMENT
+`NEW PAYMENT
 
 USER: ${chatId}
 TXID: ${text}`,
@@ -108,21 +94,20 @@ TXID: ${text}`,
   }
 });
   }
-
 });
 
-/* ================= WEBHOOK ================= */
+/* ================= ✅ WEBHOOK FIX ================= */
 app.post("/webhook",(req,res)=>{
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-/* ================= TEST ================= */
+/* ================= ROOT (IMPORTANT FOR RENDER) ================= */
 app.get("/",(req,res)=>{
-  res.send("BOT WORKING");
+  res.send("OK");
 });
 
-/* ================= SERVER ================= */
-app.listen(process.env.PORT || 3000, ()=>{
+/* ================= START ================= */
+app.listen(process.env.PORT || 3000,()=>{
   console.log("🤖 BOT RUNNING");
 });
