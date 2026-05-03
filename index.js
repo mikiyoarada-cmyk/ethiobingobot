@@ -5,8 +5,6 @@ const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 
-const users = require("./auth");
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -14,12 +12,11 @@ const io = new Server(server);
 app.use(express.static("public"));
 app.use(express.json());
 
-/* ================= MONGOOSE ================= */
 mongoose.connect(process.env.MONGODB_URI)
 .then(()=>console.log("MongoDB connected"))
 .catch(console.log);
 
-/* ================= GAME STATE ================= */
+/* ================= GAME ================= */
 let game = {
   phase:"waiting",
   players:{},
@@ -28,10 +25,10 @@ let game = {
   takenCards:[],
   interval:null,
   gameId:0,
-  locked:false
+  lock:false
 };
 
-/* ================= CARDS ================= */
+/* ================= CARD ================= */
 function generateCard(){
   function r(min,max){
     let a=[];
@@ -55,12 +52,11 @@ function generateCard(){
 
 const globalCards=[...Array(600)].map(()=>generateCard());
 
-/* ================= WIN CHECK ================= */
-function isWin(card){
+/* ================= WIN ================= */
+function isWinner(card){
 
   for(let r=0;r<5;r++){
-    if(card[r].every(n=>n==="FREE" || game.called.includes(n)))
-      return true;
+    if(card[r].every(n=>n==="FREE" || game.called.includes(n))) return true;
   }
 
   for(let c=0;c<5;c++){
@@ -73,11 +69,9 @@ function isWin(card){
   }
 
   let d1=true,d2=true;
-
   for(let i=0;i<5;i++){
     let a=card[i][i];
     let b=card[i][4-i];
-
     if(a!=="FREE" && !game.called.includes(a)) d1=false;
     if(b!=="FREE" && !game.called.includes(b)) d2=false;
   }
@@ -90,20 +84,16 @@ io.on("connection",(socket)=>{
 
   socket.on("join",(data)=>{
 
-    // 🔐 BLOCK UNPAID USERS
-    if(!users[data.phone] || !users[data.phone].approved){
-      return socket.emit("blocked","PAY FIRST");
-    }
-
     game.players[data.phone]={
       socketId:socket.id,
       telegramName:data.telegramName,
       cards:globalCards
     };
 
+    socket.emit("game_id",game.gameId);
     socket.emit("cards",globalCards);
     socket.emit("phase",game.phase);
-    socket.emit("called",game.called);
+    socket.emit("called",{list:game.called,gameId:game.gameId});
     socket.emit("taken",game.takenCards);
   });
 
@@ -114,7 +104,6 @@ io.on("connection",(socket)=>{
     let chosen=[];
 
     for(let card of data.cards){
-
       let str=JSON.stringify(card);
 
       if(game.takenCards.includes(str)) continue;
@@ -132,7 +121,7 @@ io.on("connection",(socket)=>{
   });
 });
 
-/* ================= PICK PHASE ================= */
+/* ================= PICK ================= */
 function startPickPhase(){
 
   if(Object.keys(game.players).length < 2){
@@ -149,26 +138,31 @@ function startPickPhase(){
   game.gameId++;
 
   io.emit("phase","picking");
-  io.emit("called",[]);
+  io.emit("called",{list:[],gameId:game.gameId});
   io.emit("taken",[]);
   io.emit("game_id",game.gameId);
 
   let t=30;
 
   let timer=setInterval(()=>{
-
     io.emit("countdown",t);
     t--;
 
     if(t<0){
       clearInterval(timer);
+
+      // ❌ DO NOT START IF NO ONE PICKED
+      if(Object.keys(game.selected).length === 0){
+        return startPickPhase();
+      }
+
       startGame();
     }
 
   },1000);
 }
 
-/* ================= GAME LOOP ================= */
+/* ================= GAME ================= */
 function startGame(){
 
   game.phase="playing";
@@ -176,8 +170,8 @@ function startGame(){
 
   game.interval=setInterval(()=>{
 
-    if(game.locked) return;
-    game.locked=true;
+    if(game.lock) return;
+    game.lock=true;
 
     let n;
     do{
@@ -190,7 +184,7 @@ function startGame(){
 
     setTimeout(()=>{
       io.emit("called",{list:game.called,gameId:game.gameId});
-      game.locked=false;
+      game.lock=false;
     },700);
 
     checkWinner();
@@ -198,7 +192,7 @@ function startGame(){
   },3000);
 }
 
-/* ================= WINNER ================= */
+/* ================= WIN ================= */
 function checkWinner(){
 
   for(let phone in game.selected){
@@ -207,7 +201,7 @@ function checkWinner(){
 
     for(let card of player.chosen){
 
-      if(isWin(card)){
+      if(isWinner(card)){
 
         clearInterval(game.interval);
 
@@ -216,7 +210,7 @@ function checkWinner(){
           card
         });
 
-        endGame(player.telegramName,card);
+        endGame();
         return;
       }
     }
@@ -224,10 +218,10 @@ function checkWinner(){
 }
 
 /* ================= END ================= */
-function endGame(name,card){
+function endGame(){
 
   game.phase="waiting";
-  io.emit("game_end","🏆 WINNER: "+name);
+  io.emit("game_end","🏆 GAME OVER");
 
   game.gameId++;
 
@@ -239,7 +233,10 @@ function endGame(name,card){
 
     io.emit("called",{list:[],gameId:game.gameId});
     io.emit("taken",[]);
-    io.emit("reset");
+    io.emit("stop_audio",game.gameId);
+
+    // 🔥 FORCE CLIENT CLEAR MARKS
+    io.emit("reset_board");
 
   },1000);
 
@@ -251,5 +248,5 @@ setTimeout(startPickPhase,2000);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT||10000,()=>{
-  console.log("🚀 BINGO SYSTEM READY");
+  console.log("🚀 FINAL PERFECT BINGO READY");
 });
