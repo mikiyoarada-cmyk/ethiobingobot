@@ -1,4 +1,3 @@
-cat > bot.js <<'EOF'
 require("dotenv").config();
 
 const express = require("express");
@@ -33,16 +32,16 @@ Click PLAY to continue`,
   );
 });
 
-/* ================= BUTTONS ================= */
+/* ================= CALLBACK BUTTONS ================= */
 bot.on("callback_query", async (query) => {
   const chatId = query.message?.chat?.id;
   if (!chatId) return;
 
-  /* ===== PLAY ===== */
+  /* ===== PLAY BUTTON ===== */
   if (query.data === "play") {
     auth.users[chatId] = auth.users[chatId] || { approved: false };
 
-    // Already approved → open game immediately
+    // If already approved, send Play Bingo button
     if (auth.users[chatId].approved) {
       await bot.sendMessage(
         chatId,
@@ -61,7 +60,7 @@ Click below to open the Bingo game.`,
       return bot.answerCallbackQuery(query.id);
     }
 
-    // Not approved → ask for payment
+    // Ask for payment
     await bot.sendMessage(
       chatId,
 `💰 PAY TO PLAY
@@ -84,7 +83,7 @@ Once admin approves, you will receive a 🎯 PLAY BINGO button.`
     auth.users[userId] = auth.users[userId] || {};
     auth.users[userId].approved = true;
 
-    // Notify user with Play Bingo button
+    // Notify user
     await bot.sendMessage(
       userId,
 `✅ PAYMENT APPROVED
@@ -131,7 +130,10 @@ bot.on("message", async (msg) => {
   auth.users[chatId].txid = text;
   auth.users[chatId].approved = false;
 
-  await bot.sendMessage(chatId, "📩 TXID RECEIVED. Waiting for admin approval.");
+  await bot.sendMessage(
+    chatId,
+    "📩 TXID RECEIVED. Waiting for admin approval."
+  );
 
   // Send to admin
   if (ADMIN_ID) {
@@ -171,4 +173,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("🤖 Telegram Bot Running on port", PORT);
 });
-EOF
