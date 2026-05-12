@@ -1,40 +1,35 @@
 const socket = io();
 
-const cardsDiv = document.getElementById("cards");
-const calledDiv = document.getElementById("called");
+const countdownEl = document.getElementById("countdown");
+const lastEl = document.getElementById("last");
+const calledEl = document.getElementById("called");
 
-let cards = [];
-
-socket.on("gameState", (data) => {
-  cards = data.cards || [];
-  renderCards();
+/* ================= COUNTDOWN ================= */
+socket.on("countdown", (data) => {
+  countdownEl.innerText = "Game starts in: " + data.countdown + "s";
 });
 
-socket.on("gameStart", (data) => {
-  cards = data.cards;
-  renderCards();
+/* ================= GAME START ================= */
+socket.on("gameStart", () => {
+  countdownEl.innerText = "🎮 GAME STARTED!";
+  calledEl.innerHTML = "";
+  lastEl.innerText = "-";
 });
 
+/* ================= NUMBER ================= */
 socket.on("number", (data) => {
-  calledDiv.innerHTML += `<span class="number">${data.number}</span>`;
+  lastEl.innerText = data.number;
+
+  calledEl.innerHTML += `<span class="number">${data.number}</span>`;
 });
 
+/* ================= RESET ================= */
 socket.on("reset", () => {
-  cardsDiv.innerHTML = "";
-  calledDiv.innerHTML = "";
+  calledEl.innerHTML = "";
+  lastEl.innerText = "-";
 });
 
-socket.on("winner", (data) => {
-  alert("WINNER FOUND!");
+/* ================= WINNER ================= */
+socket.on("winner", () => {
+  alert("🏆 WINNER FOUND!");
 });
-
-function renderCards() {
-  cardsDiv.innerHTML = "";
-
-  cards.forEach(c => {
-    let div = document.createElement("div");
-    div.className = "card";
-    div.innerHTML = c.numbers.join(" ");
-    cardsDiv.appendChild(div);
-  });
-}

@@ -1,18 +1,20 @@
 const { Server } = require("socket.io");
 
 let io;
-let gameInterval;
-let startTimeout;
 
 let numbersPool = [];
 let calledNumbers = [];
 let cards = [];
+
 let gameRunning = false;
+let countdown = 30;
+let interval;
+let countdownInterval;
 
 const CARD_COUNT = 600;
-const SIZE = 25; // 5x5 bingo card
+const SIZE = 25;
 
-/* ================= INIT CARDS ================= */
+/* ================= CARDS ================= */
 function generateCards() {
   cards = [];
 
@@ -24,25 +26,37 @@ function generateCards() {
       if (!nums.includes(n)) nums.push(n);
     }
 
-    cards.push({
-      id: i,
-      numbers: nums,
-      marked: []
-    });
+    cards.push({ id: i, numbers: nums, marked: [] });
   }
+}
+
+/* ================= COUNTDOWN ================= */
+function startCountdown() {
+  countdown = 30;
+
+  countdownInterval = setInterval(() => {
+    io.emit("countdown", { countdown });
+
+    countdown--;
+
+    if (countdown < 0) {
+      clearInterval(countdownInterval);
+      startGame();
+    }
+  }, 1000);
 }
 
 /* ================= START GAME ================= */
 function startGame() {
   gameRunning = true;
+
   numbersPool = Array.from({ length: 75 }, (_, i) => i + 1);
   calledNumbers = [];
 
   generateCards();
 
-  io.emit("gameStart", { cards });
-
-  gameInterval = setInterval(drawNumber, 3000);
+  io.emit("gameStart");
+  interval = setInterval(drawNumber, 3000);
 }
 
 /* ================= DRAW NUMBER ================= */
@@ -54,19 +68,19 @@ function drawNumber() {
 
   calledNumbers.push(number);
 
-  io.emit("number", { number, calledNumbers });
+  io.emit("number", { number });
 
-  checkWinners(number);
+  checkWinner(number);
 }
 
-/* ================= CHECK WINNER ================= */
-function checkWinners(number) {
+/* ================= WIN CHECK ================= */
+function checkWinner(number) {
   for (let card of cards) {
     if (card.numbers.includes(number)) {
       card.marked.push(number);
     }
 
-    if (card.marked.length >= 25) {
+    if (card.marked.length === SIZE) {
       io.emit("winner", { card });
       return endGame();
     }
@@ -75,46 +89,38 @@ function checkWinners(number) {
 
 /* ================= END GAME ================= */
 function endGame() {
-  clearInterval(gameInterval);
+  clearInterval(interval);
   gameRunning = false;
 
-  io.emit("gameEnd", { calledNumbers });
+  io.emit("gameEnd");
 
-  // RESET AFTER 10 SEC
   setTimeout(() => {
     resetGame();
-  }, 10000);
+  }, 5000);
 }
 
 /* ================= RESET ================= */
 function resetGame() {
-  calledNumbers = [];
   cards = [];
+  calledNumbers = [];
 
   io.emit("reset");
 
-  // AUTO START AFTER 30 SEC
-  startTimeout = setTimeout(() => {
-    startGame();
-  }, 30000);
+  startCountdown(); // restart cycle
 }
 
-/* ================= INIT SOCKET ================= */
+/* ================= INIT ================= */
 function init(server) {
-  io = new Server(server, {
-    cors: { origin: "*" }
-  });
+  io = new Server(server, { cors: { origin: "*" } });
 
   io.on("connection", (socket) => {
     socket.emit("gameState", {
-      cards,
       calledNumbers,
       gameRunning
     });
   });
 
-  // FIRST START AFTER 5 SEC
-  setTimeout(startGame, 5000);
+  startCountdown();
 }
 
 module.exports = { init };
