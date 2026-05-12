@@ -2,16 +2,26 @@ require("dotenv").config();
 
 const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
+const path = require("path");
 const auth = require("./auth");
 
 const app = express();
 app.use(express.json());
 
+/* ================= STATIC FILES FIX ================= */
+// IMPORTANT: this makes game.html accessible
+app.use(express.static(path.join(__dirname, "public")));
+
 const bot = new TelegramBot(process.env.BOT_TOKEN);
 
 const ADMIN_ID = Number(process.env.ADMIN_ID);
 const TELEBIRR_NUMBER = "0904489434";
+
+/* ================= GAME LINK ================= */
+// now this works because Express serves /public
 const GAME_URL = "https://ethiobingo-1j5k.onrender.com/game.html";
+// OR better (recommended):
+// const GAME_URL = "https://ethiobingo-1j5k.onrender.com/game.html";
 
 /* ================= START ================= */
 bot.onText(/\/start/, (msg) => {
@@ -19,7 +29,7 @@ bot.onText(/\/start/, (msg) => {
 
   bot.sendMessage(
     chatId,
-`🎯 BINGO GAME
+    `🎯 BINGO GAME
 
 Click PLAY to continue`,
     {
@@ -32,22 +42,21 @@ Click PLAY to continue`,
   );
 });
 
-/* ================= CALLBACK BUTTONS ================= */
+/* ================= CALLBACK ================= */
 bot.on("callback_query", async (query) => {
   const chatId = query.message?.chat?.id;
   if (!chatId) return;
 
-  /* ===== PLAY BUTTON ===== */
+  /* ===== PLAY ===== */
   if (query.data === "play") {
     auth.users[chatId] = auth.users[chatId] || { approved: false };
 
-    // If already approved, send Play Bingo button
     if (auth.users[chatId].approved) {
       await bot.sendMessage(
         chatId,
-`✅ PAYMENT APPROVED
+        `✅ PAYMENT APPROVED
 
-Click below to open the Bingo game.`,
+Click below to play.`,
         {
           reply_markup: {
             inline_keyboard: [
@@ -60,17 +69,14 @@ Click below to open the Bingo game.`,
       return bot.answerCallbackQuery(query.id);
     }
 
-    // Ask for payment
     await bot.sendMessage(
       chatId,
-`💰 PAY TO PLAY
+      `💰 PAY TO PLAY
 
 Send at least 10 ETB to TeleBirr:
 📱 ${TELEBIRR_NUMBER}
 
-After payment, send your TXID here.
-
-Once admin approves, you will receive a 🎯 PLAY BINGO button.`
+Then send TXID here.`
     );
 
     return bot.answerCallbackQuery(query.id);
@@ -83,12 +89,11 @@ Once admin approves, you will receive a 🎯 PLAY BINGO button.`
     auth.users[userId] = auth.users[userId] || {};
     auth.users[userId].approved = true;
 
-    // Notify user
     await bot.sendMessage(
       userId,
-`✅ PAYMENT APPROVED
+      `✅ PAYMENT APPROVED
 
-You can now join the live Bingo game.`,
+You can now play Bingo.`,
       {
         reply_markup: {
           inline_keyboard: [
@@ -98,7 +103,7 @@ You can now join the live Bingo game.`,
       }
     );
 
-    await bot.sendMessage(chatId, "✅ User approved successfully.");
+    await bot.sendMessage(chatId, "✅ User approved.");
     return bot.answerCallbackQuery(query.id);
   }
 
@@ -109,17 +114,14 @@ You can now join the live Bingo game.`,
     auth.users[userId] = auth.users[userId] || {};
     auth.users[userId].approved = false;
 
-    await bot.sendMessage(
-      userId,
-      "❌ PAYMENT REJECTED\n\nPlease send a valid TXID."
-    );
-
+    await bot.sendMessage(userId, "❌ Payment rejected. Send valid TXID.");
     await bot.sendMessage(chatId, "❌ User rejected.");
+
     return bot.answerCallbackQuery(query.id);
   }
 });
 
-/* ================= RECEIVE TXID ================= */
+/* ================= TXID HANDLER ================= */
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
@@ -130,18 +132,14 @@ bot.on("message", async (msg) => {
   auth.users[chatId].txid = text;
   auth.users[chatId].approved = false;
 
-  await bot.sendMessage(
-    chatId,
-    "📩 TXID RECEIVED. Waiting for admin approval."
-  );
+  await bot.sendMessage(chatId, "📩 TXID RECEIVED. Waiting admin approval.");
 
-  // Send to admin
   if (ADMIN_ID) {
     await bot.sendMessage(
       ADMIN_ID,
-`💰 NEW PAYMENT REQUEST
+      `💰 NEW PAYMENT
 
-👤 USER ID: ${chatId}
+👤 USER: ${chatId}
 🧾 TXID: ${text}`,
       {
         reply_markup: {
@@ -163,13 +161,13 @@ app.post("/webhook", (req, res) => {
   res.sendStatus(200);
 });
 
-/* ================= ROOT ================= */
+/* ================= HOME ================= */
 app.get("/", (req, res) => {
-  res.send("Bingo Telegram Bot Running");
+  res.send("🤖 Bingo Bot Running");
 });
 
 /* ================= START SERVER ================= */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("🤖 Telegram Bot Running on port", PORT);
+  console.log("🤖 Server running on port", PORT);
 });
