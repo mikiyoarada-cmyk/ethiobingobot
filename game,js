@@ -6,7 +6,7 @@ let numbersPool = [];
 let calledNumbers = [];
 
 let cards = [];
-let userCards = {}; // user chooses card
+let userCards = {};
 
 let countdown = 30;
 let interval;
@@ -15,7 +15,7 @@ let countdownInterval;
 const CARD_COUNT = 600;
 const SIZE = 25;
 
-/* ================= GENERATE 600 CARDS ================= */
+/* ================= CARDS ================= */
 function generateCards() {
   cards = [];
 
@@ -31,13 +31,15 @@ function generateCards() {
   }
 }
 
-/* ================= USER PICKS CARD ================= */
-function chooseCard(userId, cardId) {
+/* ================= USER CARD ================= */
+function getUserCard(userId, cardId) {
   userCards[userId] = {
     cardId,
     numbers: cards[cardId].numbers,
     marked: []
   };
+
+  return userCards[userId];
 }
 
 /* ================= COUNTDOWN ================= */
@@ -56,7 +58,7 @@ function startCountdown() {
   }, 1000);
 }
 
-/* ================= START GAME ================= */
+/* ================= GAME START ================= */
 function startGame() {
   numbersPool = Array.from({ length: 75 }, (_, i) => i + 1);
   calledNumbers = [];
@@ -66,7 +68,7 @@ function startGame() {
   interval = setInterval(drawNumber, 3000);
 }
 
-/* ================= DRAW NUMBER ================= */
+/* ================= DRAW ================= */
 function drawNumber() {
   if (numbersPool.length === 0) return endGame();
 
@@ -80,23 +82,23 @@ function drawNumber() {
   checkWinner(number);
 }
 
-/* ================= WIN CHECK ================= */
+/* ================= WIN ================= */
 function checkWinner(number) {
   for (let userId in userCards) {
-    let user = userCards[userId];
+    let u = userCards[userId];
 
-    if (user.numbers.includes(number)) {
-      user.marked.push(number);
+    if (u.numbers.includes(number)) {
+      u.marked.push(number);
     }
 
-    if (user.marked.length === SIZE) {
+    if (u.marked.length === SIZE) {
       io.emit("winner", { userId });
       return endGame();
     }
   }
 }
 
-/* ================= END GAME ================= */
+/* ================= END ================= */
 function endGame() {
   clearInterval(interval);
 
@@ -109,7 +111,6 @@ function endGame() {
 function resetGame() {
   userCards = {};
   calledNumbers = [];
-  generateCards();
 
   io.emit("reset");
 
@@ -125,8 +126,7 @@ function init(server) {
     socket.emit("cardsList", cards);
 
     socket.on("chooseCard", ({ userId, cardId }) => {
-      chooseCard(userId, cardId);
-      socket.emit("cardSelected", cards[cardId]);
+      socket.emit("cardSelected", getUserCard(userId, cardId));
     });
   });
 
