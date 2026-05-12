@@ -5,39 +5,34 @@ let io;
 let numbersPool = [];
 let calledNumbers = [];
 
-let cards = [];
 let userCards = {};
 
 let countdown = 30;
 let interval;
 let countdownInterval;
 
-const CARD_COUNT = 600;
 const SIZE = 25;
 
-/* ================= CARDS ================= */
-function generateCards() {
-  cards = [];
+/* ================= CREATE CARD ================= */
+function createCard() {
+  let nums = [];
 
-  for (let i = 0; i < CARD_COUNT; i++) {
-    let nums = [];
-
-    while (nums.length < SIZE) {
-      let n = Math.floor(Math.random() * 75) + 1;
-      if (!nums.includes(n)) nums.push(n);
-    }
-
-    cards.push({ id: i, numbers: nums });
+  while (nums.length < SIZE) {
+    let n = Math.floor(Math.random() * 75) + 1;
+    if (!nums.includes(n)) nums.push(n);
   }
+
+  return nums;
 }
 
-/* ================= USER CARD ================= */
-function getUserCard(userId, cardId) {
-  userCards[userId] = {
-    cardId,
-    numbers: cards[cardId].numbers,
-    marked: []
-  };
+/* ================= GET USER CARD ================= */
+function getCard(userId, cardId) {
+  if (!userCards[userId]) {
+    userCards[userId] = {
+      numbers: createCard(),
+      marked: []
+    };
+  }
 
   return userCards[userId];
 }
@@ -58,7 +53,7 @@ function startCountdown() {
   }, 1000);
 }
 
-/* ================= GAME START ================= */
+/* ================= START GAME ================= */
 function startGame() {
   numbersPool = Array.from({ length: 75 }, (_, i) => i + 1);
   calledNumbers = [];
@@ -68,7 +63,7 @@ function startGame() {
   interval = setInterval(drawNumber, 3000);
 }
 
-/* ================= DRAW ================= */
+/* ================= DRAW NUMBER ================= */
 function drawNumber() {
   if (numbersPool.length === 0) return endGame();
 
@@ -82,7 +77,7 @@ function drawNumber() {
   checkWinner(number);
 }
 
-/* ================= WIN ================= */
+/* ================= WIN CHECK ================= */
 function checkWinner(number) {
   for (let userId in userCards) {
     let u = userCards[userId];
@@ -98,7 +93,7 @@ function checkWinner(number) {
   }
 }
 
-/* ================= END ================= */
+/* ================= END GAME ================= */
 function endGame() {
   clearInterval(interval);
 
@@ -109,7 +104,7 @@ function endGame() {
 
 /* ================= RESET ================= */
 function resetGame() {
-  userCards = {};
+  userCards = [];
   calledNumbers = [];
 
   io.emit("reset");
@@ -123,14 +118,13 @@ function init(server) {
 
   io.on("connection", (socket) => {
 
-    socket.emit("cardsList", cards);
+    socket.emit("cardsList", []);
 
-    socket.on("chooseCard", ({ userId, cardId }) => {
-      socket.emit("cardSelected", getUserCard(userId, cardId));
+    socket.on("chooseCard", ({ userId }) => {
+      socket.emit("cardSelected", getCard(userId));
     });
   });
 
-  generateCards();
   startCountdown();
 }
 

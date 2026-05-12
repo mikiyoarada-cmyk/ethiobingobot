@@ -5,8 +5,7 @@ const http = require("http");
 const TelegramBot = require("node-telegram-bot-api");
 const path = require("path");
 
-/* ✅ FIX: MUST MATCH FILE NAME EXACTLY */
-const game = require("./game");
+const game = require("./game");  // ✅ THIS MUST MATCH FILE NAME EXACTLY
 const auth = require("./auth");
 
 const app = express();
@@ -15,6 +14,7 @@ const server = http.createServer(app);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
+/* ✅ FIX: USE POLLING (NO WEBHOOK) */
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 
 const ADMIN_ID = Number(process.env.ADMIN_ID);
@@ -27,9 +27,7 @@ bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
 
   bot.sendMessage(chatId,
-`🎯 BINGO GAME
-
-Open game below`, {
+`🎯 BINGO GAME READY`, {
     reply_markup: {
       inline_keyboard: [
         [{ text: "🎮 PLAY", url: "https://ethiobingo-1j5k.onrender.com/game.html" }]
@@ -60,5 +58,5 @@ TXID: ${text}`);
 
 /* ================= SERVER ================= */
 server.listen(process.env.PORT || 3000, () => {
-  console.log("Bingo running");
+  console.log("Server running");
 });

@@ -1,48 +1,31 @@
 const socket = io();
 
-const cardsDiv = document.getElementById("cards");
-const myCardDiv = document.getElementById("mycard");
 const countdownEl = document.getElementById("countdown");
+const cardEl = document.getElementById("card");
 const lastEl = document.getElementById("last");
 
 let userId = Math.floor(Math.random() * 999999);
-
-/* ================= SHOW CARDS ================= */
-socket.on("cardsList", (cards) => {
-  cardsDiv.innerHTML = "";
-
-  cards.forEach(c => {
-    let div = document.createElement("div");
-    div.className = "card";
-
-    div.innerHTML = c.numbers.map(n =>
-      `<span class="num">${n}</span>`
-    ).join("");
-
-    div.onclick = () => {
-      socket.emit("chooseCard", {
-        userId,
-        cardId: c.id
-      });
-    };
-
-    cardsDiv.appendChild(div);
-  });
-});
-
-/* ================= SELECTED CARD ================= */
-socket.on("cardSelected", (card) => {
-  myCardDiv.innerHTML = card.numbers.map(n =>
-    `<span class="num">${n}</span>`
-  ).join("");
-});
 
 /* ================= COUNTDOWN ================= */
 socket.on("countdown", (data) => {
   countdownEl.innerText = "Starts in: " + data.countdown;
 });
 
-/* ================= GAME ================= */
+/* ================= GAME START ================= */
+socket.on("gameStart", () => {
+  countdownEl.innerText = "🎮 GAME STARTED";
+});
+
+/* ================= CARD ================= */
+socket.emit("chooseCard", { userId });
+
+socket.on("cardSelected", (card) => {
+  cardEl.innerHTML = card.numbers
+    .map(n => `<span class="num">${n}</span>`)
+    .join("");
+});
+
+/* ================= NUMBER ================= */
 socket.on("number", (data) => {
   lastEl.innerText = data.number;
 });
