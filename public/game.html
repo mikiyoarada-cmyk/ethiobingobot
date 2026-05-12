@@ -26,9 +26,6 @@ body{font-family:Arial;text-align:center;background:#f5f5f5}
 <body>
 
 <h2>🎯 BINGO GAME</h2>
-
-<h3>💰 Pay 10 ETB to: 0904489434</h3>
-
 <h3 id="status"></h3>
 <h3 id="called"></h3>
 
@@ -62,7 +59,7 @@ let name=prompt("Enter Telegram Name");
 
 socket.emit("join",{phone,telegramName:name});
 
-/* ================= LOAD CARDS ================= */
+/* ================= LOAD ================= */
 socket.on("cards",(cards)=>{
 
   myCards=cards;
@@ -89,12 +86,12 @@ socket.on("cards",(cards)=>{
 function pick(i,el){
 
   if(phase !== "picking"){
-    alert("WAIT NEXT GAME");
+    alert("⏳ WAIT NEXT GAME");
     return;
   }
 
   if(el.classList.contains("taken")){
-    alert("ALREADY TAKEN");
+    alert("❌ ALREADY TAKEN");
     return;
   }
 
@@ -110,7 +107,12 @@ function pick(i,el){
 function confirmPick(){
 
   if(phase !== "picking"){
-    alert("WAIT NEXT GAME");
+    alert("⏳ WAIT NEXT GAME");
+    return;
+  }
+
+  if(selected.length===0){
+    alert("Select at least 1 card");
     return;
   }
 
@@ -123,10 +125,10 @@ function confirmPick(){
 /* ================= PHASE ================= */
 socket.on("phase",(p)=>{
 
-  phase=p;
+  phase = p;
 
   if(p==="picking"){
-    document.getElementById("status").innerText="PICK NOW";
+    document.getElementById("status").innerText="🟢 PICK NOW (30s)";
     document.getElementById("winnerBox").innerHTML="";
     selected=[];
 
@@ -141,11 +143,11 @@ socket.on("phase",(p)=>{
   }
 
   if(p==="playing"){
-    document.getElementById("status").innerText="GAME STARTED";
+    document.getElementById("status").innerText="🎮 GAME STARTED";
   }
 
   if(p==="waiting"){
-    document.getElementById("status").innerText="WAIT NEXT GAME";
+    document.getElementById("status").innerText="⏳ WAIT NEXT GAME";
   }
 });
 
@@ -154,12 +156,13 @@ socket.on("game_id",(id)=>{
   currentGameId=id;
 });
 
-/* ================= TAKEN CARDS ================= */
+/* ================= TAKEN ================= */
 socket.on("taken",(list)=>{
 
   document.querySelectorAll(".card").forEach((cardEl,i)=>{
 
-    let str=JSON.stringify(myCards[i]);
+    let card=myCards[i];
+    let str=JSON.stringify(card);
 
     if(list.includes(str)){
       cardEl.classList.add("taken");
@@ -208,20 +211,27 @@ socket.on("called",(data)=>{
 /* ================= WINNER ================= */
 socket.on("winner",(w)=>{
 
-  document.getElementById("winnerBox").innerHTML=`
-    <h2>🏆 WINNER: ${w.telegramName}</h2>
-    <div class="card">
-      <div class="header">
-        <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
-      </div>
-      <div class="grid">
-        ${w.card.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
-      </div>
+  let html=`
+  <h2>🏆 WINNER: ${w.telegramName}</h2>
+  <div class="card">
+    <div class="header">
+      <div>B</div><div>I</div><div>N</div><div>G</div><div>O</div>
     </div>
+    <div class="grid">
+      ${w.card.flat().map(n=>`<div class="cell">${n}</div>`).join("")}
+    </div>
+  </div>
   `;
+
+  document.getElementById("winnerBox").innerHTML=html;
 });
 
-/* ================= RESET ================= */
+/* ================= END ================= */
+socket.on("game_end",(m)=>{
+  document.getElementById("status").innerText=m;
+});
+
+/* ================= RESET BOARD ================= */
 socket.on("reset_board",()=>{
 
   document.getElementById("called").innerText="";
