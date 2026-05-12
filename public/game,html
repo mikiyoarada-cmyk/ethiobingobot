@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Bingo</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <script defer src="client.js"></script>
+
+  <style>
+    body { background:#111; color:white; font-family:Arial; text-align:center; }
+    .card { display:inline-block; margin:5px; padding:10px; background:#222; cursor:pointer; }
+    .num { margin:2px; display:inline-block; padding:3px; background:#333; }
+    .big { font-size:30px; color:yellow; }
+  </style>
+</head>
+
+<body>
+
+<h1>🎯 BINGO GAME</h1>
+
+<h2 id="countdown">Waiting...</h2>
+
+<h2>Cards (Click to Choose)</h2>
+<div id="cards"></div>
+
+<h2>Your Card</h2>
+<div id="mycard"></div>
+
+<h2>Last Number</h2>
+<div id="last" class="big">-</div>
+
+</body>
+</html>

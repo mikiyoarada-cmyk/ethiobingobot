@@ -4,7 +4,9 @@ const express = require("express");
 const http = require("http");
 const TelegramBot = require("node-telegram-bot-api");
 const path = require("path");
+
 const game = require("./game");
+const auth = require("./auth");
 
 const app = express();
 const server = http.createServer(app);
@@ -12,35 +14,30 @@ const server = http.createServer(app);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-/* ✅ FIX: POLLING MODE (IMPORTANT) */
+/* ✅ POLLING FIX */
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 
-const TELEBIRR_NUMBER = "0904489434";
+const ADMIN_ID = Number(process.env.ADMIN_ID);
 
-/* ================= GAME INIT ================= */
+/* ================= GAME ================= */
 game.init(server);
 
 /* ================= START ================= */
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
 
-  bot.sendMessage(chatId,
-`🎯 BINGO GAME READY
+  auth.users[chatId] = { approved: false };
 
-Click below to open game`, {
+  bot.sendMessage(chatId,
+`🎯 BINGO GAME
+
+Send TXID to join`, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "🎮 PLAY", url: "https://ethiobingo-1j5k.onrender.com/game.html" }]
+        [{ text: "🎮 OPEN GAME", url: "https://ethiobingo-1j5k.onrender.com/game.html" }]
       ]
     }
   });
-});
-
-/* ================= CARD REQUEST ================= */
-bot.onText(/\/card/, (msg) => {
-  const chatId = msg.chat.id;
-
-  bot.sendMessage(chatId, "🎫 Your card is loading... open game page");
 });
 
 /* ================= TXID ================= */
@@ -50,14 +47,59 @@ bot.on("message", (msg) => {
 
   if (!text || text.startsWith("/")) return;
 
-  bot.sendMessage(chatId, "📩 TXID received, waiting admin approval...");
+  auth.users[chatId] = { txid: text, approved: false };
+
+  if (ADMIN_ID) {
+    bot.sendMessage(
+      ADMIN_ID,
+      `💰 PAYMENT REQUEST
+
+USER: ${chatId}
+TXID: ${text}`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "✅ APPROVE", callback_data: "approve_" + chatId },
+              { text: "❌ REJECT", callback_data: "reject_" + chatId }
+            ]
+          ]
+        }
+      }
+    );
+  }
+
+  bot.sendMessage(chatId, "📩 Sent to admin for approval.");
+});
+
+/* ================= ADMIN ACTIONS ================= */
+bot.on("callback_query", (query) => {
+  const chatId = query.message.chat.id;
+
+  if (query.data.startsWith("approve_")) {
+    const userId = query.data.split("_")[1];
+
+    auth.users[userId].approved = true;
+
+    bot.sendMessage(userId,
+`✅ APPROVED
+
+Now open game and choose your card`);
+
+    bot.sendMessage(chatId, "Approved ✔");
+  }
+
+  if (query.data.startsWith("reject_")) {
+    const userId = query.data.split("_")[1];
+
+    auth.users[userId].approved = false;
+
+    bot.sendMessage(userId, "❌ REJECTED");
+    bot.sendMessage(chatId, "Rejected ❌");
+  }
 });
 
 /* ================= SERVER ================= */
-app.get("/", (req, res) => {
-  res.send("Bingo Running");
-});
-
 server.listen(process.env.PORT || 3000, () => {
-  console.log("Server running");
+  console.log("Bingo running");
 });
