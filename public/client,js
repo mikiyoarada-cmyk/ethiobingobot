@@ -1,0 +1,40 @@
+const socket = io();
+
+const cardsDiv = document.getElementById("cards");
+const calledDiv = document.getElementById("called");
+
+let cards = [];
+
+socket.on("gameState", (data) => {
+  cards = data.cards || [];
+  renderCards();
+});
+
+socket.on("gameStart", (data) => {
+  cards = data.cards;
+  renderCards();
+});
+
+socket.on("number", (data) => {
+  calledDiv.innerHTML += `<span class="number">${data.number}</span>`;
+});
+
+socket.on("reset", () => {
+  cardsDiv.innerHTML = "";
+  calledDiv.innerHTML = "";
+});
+
+socket.on("winner", (data) => {
+  alert("WINNER FOUND!");
+});
+
+function renderCards() {
+  cardsDiv.innerHTML = "";
+
+  cards.forEach(c => {
+    let div = document.createElement("div");
+    div.className = "card";
+    div.innerHTML = c.numbers.join(" ");
+    cardsDiv.appendChild(div);
+  });
+}
