@@ -4,33 +4,27 @@ let io;
 
 let numbersPool = [];
 let calledNumbers = [];
-let cards = [];
+let userCards = {}; // each user gets ONE card
 
-let gameRunning = false;
 let countdown = 30;
 let interval;
 let countdownInterval;
 
-const CARD_COUNT = 600;
 const SIZE = 25;
 
-/* ================= CARDS ================= */
-function generateCards() {
-  cards = [];
+/* ================= CARD GENERATOR ================= */
+function generateCard() {
+  let nums = [];
 
-  for (let i = 0; i < CARD_COUNT; i++) {
-    let nums = [];
-
-    while (nums.length < SIZE) {
-      let n = Math.floor(Math.random() * 75) + 1;
-      if (!nums.includes(n)) nums.push(n);
-    }
-
-    cards.push({ id: i, numbers: nums, marked: [] });
+  while (nums.length < SIZE) {
+    let n = Math.floor(Math.random() * 75) + 1;
+    if (!nums.includes(n)) nums.push(n);
   }
+
+  return nums;
 }
 
-/* ================= COUNTDOWN ================= */
+/* ================= START COUNTDOWN ================= */
 function startCountdown() {
   countdown = 30;
 
@@ -48,14 +42,11 @@ function startCountdown() {
 
 /* ================= START GAME ================= */
 function startGame() {
-  gameRunning = true;
-
   numbersPool = Array.from({ length: 75 }, (_, i) => i + 1);
   calledNumbers = [];
 
-  generateCards();
-
   io.emit("gameStart");
+
   interval = setInterval(drawNumber, 3000);
 }
 
@@ -73,15 +64,29 @@ function drawNumber() {
   checkWinner(number);
 }
 
+/* ================= ASSIGN USER CARD ================= */
+function getUserCard(userId) {
+  if (!userCards[userId]) {
+    userCards[userId] = {
+      numbers: generateCard(),
+      marked: []
+    };
+  }
+
+  return userCards[userId];
+}
+
 /* ================= WIN CHECK ================= */
 function checkWinner(number) {
-  for (let card of cards) {
+  for (let userId in userCards) {
+    let card = userCards[userId];
+
     if (card.numbers.includes(number)) {
       card.marked.push(number);
     }
 
     if (card.marked.length === SIZE) {
-      io.emit("winner", { card });
+      io.emit("winner", { userId });
       return endGame();
     }
   }
@@ -90,33 +95,35 @@ function checkWinner(number) {
 /* ================= END GAME ================= */
 function endGame() {
   clearInterval(interval);
-  gameRunning = false;
 
   io.emit("gameEnd");
 
-  setTimeout(() => {
-    resetGame();
-  }, 5000);
+  setTimeout(resetGame, 5000);
 }
 
 /* ================= RESET ================= */
 function resetGame() {
-  cards = [];
   calledNumbers = [];
+  userCards = {};
 
   io.emit("reset");
 
-  startCountdown(); // restart cycle
+  startCountdown();
 }
 
-/* ================= INIT ================= */
+/* ================= INIT SOCKET ================= */
 function init(server) {
   io = new Server(server, { cors: { origin: "*" } });
 
   io.on("connection", (socket) => {
+
+    socket.on("getCard", (userId) => {
+      const card = getUserCard(userId);
+      socket.emit("yourCard", card);
+    });
+
     socket.emit("gameState", {
-      calledNumbers,
-      gameRunning
+      calledNumbers
     });
   });
 

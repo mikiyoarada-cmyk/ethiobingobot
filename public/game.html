@@ -6,9 +6,10 @@
   <script defer src="client.js"></script>
 
   <style>
-    body { font-family: Arial; background:#111; color:white; text-align:center; }
-    .number { display:inline-block; margin:5px; padding:5px; background:#333; }
+    body { background:#111; color:white; font-family:Arial; text-align:center; }
     .big { font-size:40px; color:yellow; margin:20px; }
+    .card { margin-top:20px; padding:10px; background:#222; display:inline-block; }
+    .num { display:inline-block; margin:3px; padding:5px; background:#333; }
   </style>
 </head>
 
@@ -16,13 +17,13 @@
 
 <h1>🎯 LIVE BINGO</h1>
 
-<h2 id="countdown">Starting soon...</h2>
+<h2 id="countdown">Waiting...</h2>
 
 <h2>Last Number:</h2>
 <div id="last" class="big">-</div>
 
-<h2>Called Numbers:</h2>
-<div id="called"></div>
+<h2>Your Card:</h2>
+<div id="card" class="card"></div>
 
 </body>
 </html>

@@ -2,34 +2,38 @@ const socket = io();
 
 const countdownEl = document.getElementById("countdown");
 const lastEl = document.getElementById("last");
-const calledEl = document.getElementById("called");
+const cardEl = document.getElementById("card");
+
+let userId = Math.floor(Math.random() * 999999);
 
 /* ================= COUNTDOWN ================= */
 socket.on("countdown", (data) => {
-  countdownEl.innerText = "Game starts in: " + data.countdown + "s";
+  countdownEl.innerText = "Game starts in " + data.countdown + "s";
 });
 
 /* ================= GAME START ================= */
 socket.on("gameStart", () => {
-  countdownEl.innerText = "🎮 GAME STARTED!";
-  calledEl.innerHTML = "";
-  lastEl.innerText = "-";
+  countdownEl.innerText = "🎮 GAME STARTED";
 });
 
 /* ================= NUMBER ================= */
 socket.on("number", (data) => {
   lastEl.innerText = data.number;
+});
 
-  calledEl.innerHTML += `<span class="number">${data.number}</span>`;
+/* ================= YOUR CARD ================= */
+socket.emit("getCard", userId);
+
+socket.on("yourCard", (card) => {
+  cardEl.innerHTML = card.numbers.map(n => `<span class="num">${n}</span>`).join("");
 });
 
 /* ================= RESET ================= */
 socket.on("reset", () => {
-  calledEl.innerHTML = "";
   lastEl.innerText = "-";
 });
 
 /* ================= WINNER ================= */
-socket.on("winner", () => {
-  alert("🏆 WINNER FOUND!");
+socket.on("winner", (data) => {
+  alert("🏆 WINNER: " + data.userId);
 });
