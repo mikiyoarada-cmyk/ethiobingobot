@@ -2,34 +2,34 @@ require("dotenv").config();
 
 const express = require("express");
 const http = require("http");
-const path = require("path");
 const TelegramBot = require("node-telegram-bot-api");
+const path = require("path");
+
+const game = require("./game");
+const auth = require("./auth");
 
 const app = express();
 const server = http.createServer(app);
 
-/* ================= EXPRESS ================= */
-
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
-
-/* ================= TELEGRAM BOT ================= */
 
 const bot = new TelegramBot(process.env.BOT_TOKEN, {
 polling: true
 });
 
-/* Remove old webhook if one exists */
-bot.deleteWebHook().catch(console.error);
+const ADMIN_ID = Number(process.env.ADMIN_ID);
 
-/* ================= START COMMAND ================= */
+/* ================= GAME INIT ================= */
+game.init(server);
 
-bot.onText(//start/, async (msg) => {
+/* ================= START ================= */
+bot.onText(//start/, (msg) => {
 const chatId = msg.chat.id;
 
-await bot.sendMessage(
+bot.sendMessage(
 chatId,
-"🎯 BINGO GAME\n\nClick PLAY to open the game.",
+"🎯 BINGO GAME READY",
 {
 reply_markup: {
 inline_keyboard: [
@@ -45,28 +45,34 @@ url: "https://ethiobingo-1j5k.onrender.com/game.html"
 );
 });
 
-/* ================= MESSAGE HANDLER ================= */
+/* ================= TXID ================= */
+bot.on("message", (msg) => {
+const chatId = msg.chat.id;
+const text = msg.text;
 
-bot.on("message", async (msg) => {
-if (!msg.text) return;
-if (msg.text.startsWith("/")) return;
+if (!text || text.startsWith("/")) return;
 
-await bot.sendMessage(
-msg.chat.id,
-"📩 Message received."
+auth.users[chatId] = { txid: text };
+
+if (ADMIN_ID) {
+bot.sendMessage(
+ADMIN_ID,
+`💰 PAYMENT
+
+USER: ${chatId}
+TXID: ${text}`
 );
+}
+
+bot.sendMessage(chatId, "📩 Sent to admin.");
 });
 
 /* ================= HOME ================= */
-
 app.get("/", (req, res) => {
 res.send("Bingo Bot Running");
 });
 
 /* ================= SERVER ================= */
-
-const PORT = process.env.PORT || 3000;
-
-server.listen(PORT, () => {
+server.listen(process.env.PORT || 3000, () => {
 console.log("Server running");
 });
