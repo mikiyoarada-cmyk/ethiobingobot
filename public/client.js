@@ -1,57 +1,78 @@
 const socket = io();
 
 
-const cartelas=document.getElementById("cartelas");
-const mycard=document.getElementById("mycard");
-const last=document.getElementById("last");
-const countdown=document.getElementById("countdown");
+const cartelas = document.getElementById("cartelas");
+const mycard = document.getElementById("mycard");
+const last = document.getElementById("last");
+const countdown = document.getElementById("countdown");
 
 
-let userId=Math.floor(Math.random()*999999);
+let userId = Math.floor(Math.random()*999999);
 
 
 
 socket.on("countdown",(data)=>{
 
-countdown.innerHTML=
-"Game starts in "+data.countdown+" seconds";
+countdown.innerHTML =
+"Game starts in: " + data.countdown + " seconds";
 
 });
 
 
 
-function showCard(card,element){
+function drawCard(card, element){
 
 
-let html="";
+let html = `
+
+<table border="1" cellspacing="0" cellpadding="5">
+
+<tr>
+<th>B</th>
+<th>I</th>
+<th>N</th>
+<th>G</th>
+<th>O</th>
+</tr>
+
+`;
 
 
-html += "<div class='bingo'>";
+
+for(let i=0;i<25;i+=5){
+
+html += "<tr>";
+
+for(let j=0;j<5;j++){
+
+let value = card.numbers[i+j];
 
 
-["B","I","N","G","O"].forEach(x=>{
+if(value==="FREE"){
 
-html+=
-"<div class='cell letter'>"+x+"</div>";
+html += "<td>FREE</td>";
 
-});
+}else{
 
-
-
-card.numbers.forEach(n=>{
-
-html+=
-"<div class='cell'>"+n+"</div>";
-
-});
-
-
-html+="</div>";
-
-
-element.innerHTML=html;
+html += "<td>"+value+"</td>";
 
 }
+
+}
+
+html += "</tr>";
+
+}
+
+
+html += "</table>";
+
+
+element.innerHTML = html;
+
+
+}
+
 
 
 
@@ -62,25 +83,30 @@ socket.on("cardsList",(cards)=>{
 cartelas.innerHTML="";
 
 
-cards.forEach(card=>{
+cards.forEach((card)=>{
 
 
 let box=document.createElement("div");
 
+
 box.className="cartela";
 
 
-box.innerHTML=
-"<div class='title'>Cartela "+card.id+"</div>";
+let title=document.createElement("h3");
+
+title.innerHTML="Cartela "+card.id;
+
+
+box.appendChild(title);
 
 
 
-let temp=document.createElement("div");
+let table=document.createElement("div");
 
-showCard(card,temp);
+drawCard(card,table);
 
 
-box.innerHTML+=temp.innerHTML;
+box.appendChild(table);
 
 
 
@@ -103,10 +129,12 @@ cardId:card.id
 cartelas.appendChild(box);
 
 
+
 });
 
 
 });
+
 
 
 
@@ -114,14 +142,23 @@ cartelas.appendChild(box);
 socket.on("cardSelected",(card)=>{
 
 
-mycard.innerHTML=
-"<h3>Selected Cartela "+card.id+"</h3>";
+mycard.innerHTML="";
 
 
-showCard(card,mycard);
+let title=document.createElement("h2");
+
+title.innerHTML="Your Cartela "+card.id;
+
+
+mycard.appendChild(title);
+
+
+drawCard(card,mycard);
+
 
 
 });
+
 
 
 

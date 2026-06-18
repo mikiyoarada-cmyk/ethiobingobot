@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html>
+
 <head>
 
 <title>Ethio Bingo</title>
 
 <script src="/socket.io/socket.io.js"></script>
 <script defer src="client.js"></script>
+
 
 <style>
 
@@ -21,7 +23,7 @@ text-align:center;
 
 display:grid;
 grid-template-columns:repeat(4,1fr);
-gap:15px;
+gap:20px;
 padding:20px;
 
 }
@@ -30,75 +32,48 @@ padding:20px;
 .cartela{
 
 background:#222;
-border:2px solid #555;
-border-radius:10px;
 padding:10px;
-cursor:pointer;
+border:2px solid gray;
+border-radius:10px;
 
 }
 
 
-.cartela:hover{
+table{
 
-background:#006600;
-
-}
-
-
-.title{
-
-font-size:18px;
-color:yellow;
-margin-bottom:8px;
+margin:auto;
+border-collapse:collapse;
 
 }
 
 
-.bingo{
+td,th{
 
-display:grid;
-grid-template-columns:repeat(5,35px);
-gap:2px;
-justify-content:center;
-
-}
-
-
-
-.cell{
-
-background:#333;
-padding:7px 0;
-font-weight:bold;
+width:35px;
+height:35px;
+text-align:center;
+border:1px solid white;
 
 }
 
 
-.letter{
+th{
 
 background:red;
-color:white;
-
-}
-
-
-
-#mycard{
-
-margin:20px;
 
 }
 
 
 #last{
 
-font-size:40px;
-color:lime;
+font-size:45px;
+color:yellow;
 
 }
 
 
 </style>
+
 
 </head>
 
@@ -109,36 +84,27 @@ color:lime;
 <h1>🎯 ETHIO BINGO</h1>
 
 
-<h2 id="countdown">
-Waiting...
-</h2>
+<h2 id="countdown"></h2>
 
 
-<h2>
-Called Number
-</h2>
+<h2>Called Number</h2>
+
+<div id="last">-</div>
 
 
-<div id="last">
--
-</div>
 
-
-<h2>
-Choose Cartela
-</h2>
+<h2>600 Cartelas</h2>
 
 
 <div id="cartelas"></div>
 
 
 
-<h2>
-Your Cartela
-</h2>
+<h2>Your Selected Cartela</h2>
 
 
 <div id="mycard"></div>
+
 
 
 </body>
