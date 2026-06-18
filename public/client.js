@@ -1,25 +1,34 @@
-const socket=io();
+const socket = io();
+
+const cartelas = document.getElementById("cartelas");
+const mycard = document.getElementById("mycard");
+const last = document.getElementById("last");
+const countdown = document.getElementById("countdown");
+
+let selectedCard = null;
+let called = [];
+
+let audioEnabled = false;
 
 
-const cartelas=document.getElementById("cartelas");
-const mycard=document.getElementById("mycard");
-const last=document.getElementById("last");
-const countdown=document.getElementById("countdown");
+// Enable browser sound after first click
+document.body.addEventListener("click", () => {
 
+    audioEnabled = true;
 
-let selectedCard=null;
+}, { once:true });
 
-let called=[];
 
 
 
 
 socket.on("countdown",(d)=>{
 
-countdown.innerHTML=
-"START IN "+d.countdown;
+    countdown.innerHTML =
+    "START IN " + d.countdown + " SECONDS";
 
 });
+
 
 
 
@@ -44,7 +53,6 @@ html+=`
 
 for(let i=0;i<25;i+=5){
 
-
 html+="<tr>";
 
 for(let j=0;j<5;j++){
@@ -53,35 +61,31 @@ for(let j=0;j<5;j++){
 let n=card.numbers[i+j];
 
 
-let color="";
+let mark="";
 
 
 if(called.includes(n)){
 
-color="green";
+mark="green";
 
 }
 
 
 if(n==="FREE"){
 
-color="yellow";
+mark="yellow";
 
 }
 
 
 
-html+=
-`
-<td style="
-background:${color};
-color:black;
-">
+html+=`
+
+<td class="${mark}">
 ${n}
 </td>
+
 `;
-
-
 
 }
 
@@ -93,6 +97,7 @@ html+="</tr>";
 
 
 html+="</table>";
+
 
 element.innerHTML=html;
 
@@ -118,7 +123,6 @@ cards.forEach(card=>{
 
 let box=document.createElement("div");
 
-
 box.className="cartela";
 
 
@@ -131,7 +135,6 @@ let area=document.createElement("div");
 
 
 show(card,area);
-
 
 
 box.appendChild(area);
@@ -166,7 +169,6 @@ cartelas.appendChild(box);
 });
 
 
-
 });
 
 
@@ -181,9 +183,7 @@ socket.on("selected",(data)=>{
 
 selectedCard=data.card;
 
-
-called=data.called;
-
+called=data.called || [];
 
 showMyCard();
 
@@ -207,10 +207,8 @@ mycard.innerHTML="";
 
 let title=document.createElement("h2");
 
-
 title.innerHTML=
 "Selected Cartela "+selectedCard.id;
-
 
 
 mycard.appendChild(title);
@@ -235,6 +233,8 @@ mycard.appendChild(area);
 
 
 
+
+
 socket.on("number",(data)=>{
 
 
@@ -245,26 +245,38 @@ last.innerHTML=data.number;
 
 
 
-if(selectedCard){
-
 showMyCard();
+
+
+
+// PLAY VOICE
+
+if(audioEnabled){
+
+
+let sound =
+new Audio(
+"/voices/"+data.number+".mp3"
+);
+
+
+sound.volume=1.0;
+
+
+sound.play()
+.catch(error=>{
+
+console.log("Audio error:",error);
+
+});
+
 
 }
 
 
 
-// play matching voice
-
-let audio=new Audio(
-"/voices/"+data.number+".mp3"
-);
-
-
-audio.play();
-
-
-
 });
+
 
 
 
@@ -278,11 +290,7 @@ socket.on("gameStart",()=>{
 called=[];
 
 
-if(selectedCard){
-
 showMyCard();
-
-}
 
 
 });
