@@ -2,61 +2,71 @@ require("dotenv").config();
 
 const express = require("express");
 const http = require("http");
-const TelegramBot = require("node-telegram-bot-api");
 const path = require("path");
-
-const game = require("./game");  // ✅ THIS MUST MATCH FILE NAME EXACTLY
-const auth = require("./auth");
+const TelegramBot = require("node-telegram-bot-api");
 
 const app = express();
 const server = http.createServer(app);
 
+/* ================= EXPRESS ================= */
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-/* ✅ FIX: USE POLLING (NO WEBHOOK) */
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+/* ================= TELEGRAM BOT ================= */
 
-const ADMIN_ID = Number(process.env.ADMIN_ID);
-
-/* ================= GAME INIT ================= */
-game.init(server);
-
-/* ================= START ================= */
-bot.onText(/\/start/, (msg) => {
-  const chatId = msg.chat.id;
-
-  bot.sendMessage(chatId,
-`🎯 BINGO GAME READY`, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🎮 PLAY", url: "https://ethiobingo-1j5k.onrender.com/game.html" }]
-      ]
-    }
-  });
+const bot = new TelegramBot(process.env.BOT_TOKEN, {
+polling: true
 });
 
-/* ================= TXID ================= */
-bot.on("message", (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text;
+/* Remove old webhook if one exists */
+bot.deleteWebHook().catch(console.error);
 
-  if (!text || text.startsWith("/")) return;
+/* ================= START COMMAND ================= */
 
-  auth.users[chatId] = { txid: text };
+bot.onText(//start/, async (msg) => {
+const chatId = msg.chat.id;
 
-  if (ADMIN_ID) {
-    bot.sendMessage(ADMIN_ID,
-`💰 PAYMENT
+await bot.sendMessage(
+chatId,
+"🎯 BINGO GAME\n\nClick PLAY to open the game.",
+{
+reply_markup: {
+inline_keyboard: [
+[
+{
+text: "🎮 PLAY",
+url: "https://ethiobingo-1j5k.onrender.com/game.html"
+}
+]
+]
+}
+}
+);
+});
 
-USER: ${chatId}
-TXID: ${text}`);
-  }
+/* ================= MESSAGE HANDLER ================= */
 
-  bot.sendMessage(chatId, "📩 Sent to admin.");
+bot.on("message", async (msg) => {
+if (!msg.text) return;
+if (msg.text.startsWith("/")) return;
+
+await bot.sendMessage(
+msg.chat.id,
+"📩 Message received."
+);
+});
+
+/* ================= HOME ================= */
+
+app.get("/", (req, res) => {
+res.send("Bingo Bot Running");
 });
 
 /* ================= SERVER ================= */
-server.listen(process.env.PORT || 3000, () => {
-  console.log("Server running");
+
+const PORT = process.env.PORT || 3000;
+
+server.listen(PORT, () => {
+console.log("Server running");
 });
