@@ -8,38 +8,59 @@ const countdown = document.getElementById("countdown");
 let selectedCard = null;
 let called = [];
 
-let audioEnabled = false;
+let soundReady = false;
 
 
-// Enable browser sound after first click
-document.body.addEventListener("click", () => {
+// unlock browser audio
+document.addEventListener("click", function(){
 
-    audioEnabled = true;
+    soundReady = true;
 
-}, { once:true });
-
-
-
-
-
-socket.on("countdown",(d)=>{
-
-    countdown.innerHTML =
-    "START IN " + d.countdown + " SECONDS";
-
-});
+}, {once:true});
 
 
 
 
+// create audio folder path
+function playVoice(number){
+
+    if(!soundReady) return;
 
 
-function show(card,element){
+    let audio = new Audio();
+
+    audio.src = "/voices/" + number + ".mp3";
+
+    audio.volume = 1;
+
+    audio.load();
 
 
-let html="<table>";
+    audio.play()
+    .then(()=>{
 
-html+=`
+        console.log("Playing voice:",number);
+
+    })
+    .catch(err=>{
+
+        console.log("Voice blocked:",err);
+
+    });
+
+}
+
+
+
+
+
+function drawCard(card,element){
+
+
+let html = `
+
+<table>
+
 <tr>
 <th>B</th>
 <th>I</th>
@@ -47,63 +68,87 @@ html+=`
 <th>G</th>
 <th>O</th>
 </tr>
+
 `;
 
 
 
 for(let i=0;i<25;i+=5){
 
-html+="<tr>";
+
+html += "<tr>";
+
+
 
 for(let j=0;j<5;j++){
 
 
-let n=card.numbers[i+j];
+let number = card.numbers[i+j];
 
 
-let mark="";
+let cls="";
 
 
-if(called.includes(n)){
+if(called.includes(number)){
 
-mark="green";
-
-}
-
-
-if(n==="FREE"){
-
-mark="yellow";
+cls="marked";
 
 }
 
 
+if(number==="FREE"){
 
-html+=`
+cls="free";
 
-<td class="${mark}">
-${n}
+}
+
+
+
+html += `
+
+<td class="${cls}">
+${number}
 </td>
 
 `;
 
-}
-
-
-html+="</tr>";
-
-}
-
-
-
-html+="</table>";
-
-
-element.innerHTML=html;
 
 
 }
 
+
+html += "</tr>";
+
+}
+
+
+
+html += "</table>";
+
+
+
+element.innerHTML = html;
+
+
+
+}
+
+
+
+
+
+
+
+
+
+socket.on("countdown",(data)=>{
+
+
+countdown.innerHTML =
+"GAME STARTS IN "+data.countdown+" SECONDS";
+
+
+});
 
 
 
@@ -118,33 +163,42 @@ socket.on("cardsList",(cards)=>{
 cartelas.innerHTML="";
 
 
+
 cards.forEach(card=>{
 
 
 let box=document.createElement("div");
 
+
 box.className="cartela";
 
 
-box.innerHTML=
-"<h3>Cartela "+card.id+"</h3>";
+
+let title=document.createElement("h3");
+
+title.innerHTML="Cartela "+card.id;
+
+
+box.appendChild(title);
 
 
 
 let area=document.createElement("div");
 
 
-show(card,area);
+drawCard(card,area);
 
 
 box.appendChild(area);
 
 
 
-box.onclick=()=>{
+
+box.onclick=function(){
 
 
 selectedCard=card;
+
 
 
 socket.emit(
@@ -155,7 +209,9 @@ cardId:card.id
 );
 
 
+
 showMyCard();
+
 
 
 };
@@ -169,7 +225,9 @@ cartelas.appendChild(box);
 });
 
 
+
 });
+
 
 
 
@@ -183,7 +241,9 @@ socket.on("selected",(data)=>{
 
 selectedCard=data.card;
 
+
 called=data.called || [];
+
 
 showMyCard();
 
@@ -196,29 +256,36 @@ showMyCard();
 
 
 
+
 function showMyCard(){
 
 
-if(!selectedCard)return;
+if(!selectedCard) return;
+
 
 
 mycard.innerHTML="";
 
 
-let title=document.createElement("h2");
 
-title.innerHTML=
-"Selected Cartela "+selectedCard.id;
+let h=document.createElement("h2");
 
 
-mycard.appendChild(title);
+h.innerHTML=
+"YOUR CARTELA "+selectedCard.id;
+
+
+
+mycard.appendChild(h);
 
 
 
 let area=document.createElement("div");
 
 
-show(selectedCard,area);
+
+drawCard(selectedCard,area);
+
 
 
 mycard.appendChild(area);
@@ -226,6 +293,7 @@ mycard.appendChild(area);
 
 
 }
+
 
 
 
@@ -245,33 +313,13 @@ last.innerHTML=data.number;
 
 
 
+// mark selected cartela
 showMyCard();
 
 
 
-// PLAY VOICE
-
-if(audioEnabled){
-
-
-let sound =
-new Audio(
-"/voices/"+data.number+".mp3"
-);
-
-
-sound.volume=1.0;
-
-
-sound.play()
-.catch(error=>{
-
-console.log("Audio error:",error);
-
-});
-
-
-}
+// play matching voice
+playVoice(data.number);
 
 
 
