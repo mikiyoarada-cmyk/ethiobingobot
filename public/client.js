@@ -1,160 +1,134 @@
 const socket = io();
 
-
 const cartelas = document.getElementById("cartelas");
 const mycard = document.getElementById("mycard");
 const last = document.getElementById("last");
 const countdown = document.getElementById("countdown");
 
+let userId = Math.floor(Math.random() * 999999);
 
-let userId = Math.floor(Math.random()*999999);
+let selectedCard = null;
+let called = [];
 
 
 
-socket.on("countdown",(data)=>{
+socket.on("countdown", (data) => {
 
-countdown.innerHTML =
-"Game starts in: " + data.countdown + " seconds";
+    countdown.innerHTML =
+    "Game starts in: " + data.countdown + " seconds";
 
 });
 
 
 
-function drawCard(card, element){
+function drawCard(card, element) {
+
+    let html = `
+    <table>
+    <tr>
+    <th>B</th>
+    <th>I</th>
+    <th>N</th>
+    <th>G</th>
+    <th>O</th>
+    </tr>
+    `;
 
 
-let html = `
+    for(let i = 0; i < 25; i += 5) {
 
-<table border="1" cellspacing="0" cellpadding="5">
+        html += "<tr>";
 
-<tr>
-<th>B</th>
-<th>I</th>
-<th>N</th>
-<th>G</th>
-<th>O</th>
-</tr>
+        for(let j = 0; j < 5; j++) {
 
-`;
+            let number = card.numbers[i+j];
+
+            let mark = "";
 
 
-
-for(let i=0;i<25;i+=5){
-
-html += "<tr>";
-
-for(let j=0;j<5;j++){
-
-let value = card.numbers[i+j];
+            if(called.includes(number)) {
+                mark = "marked";
+            }
 
 
-if(value==="FREE"){
+            if(number === "FREE") {
+                mark = "free";
+            }
 
-html += "<td>FREE</td>";
 
-}else{
+            html += `
+            <td class="${mark}">
+            ${number}
+            </td>
+            `;
 
-html += "<td>"+value+"</td>";
+        }
+
+        html += "</tr>";
+
+    }
+
+
+    html += "</table>";
+
+    element.innerHTML = html;
 
 }
 
-}
-
-html += "</tr>";
-
-}
-
-
-html += "</table>";
-
-
-element.innerHTML = html;
-
-
-}
 
 
 
+socket.on("cardsList", (cards) => {
 
 
-socket.on("cardsList",(cards)=>{
+    cartelas.innerHTML = "";
 
 
-cartelas.innerHTML="";
+    cards.forEach((card) => {
 
 
-cards.forEach((card)=>{
+        let box = document.createElement("div");
+
+        box.className = "cartela";
 
 
-let box=document.createElement("div");
-
-
-box.className="cartela";
-
-
-let title=document.createElement("h3");
-
-title.innerHTML="Cartela "+card.id;
-
-
-box.appendChild(title);
+        box.innerHTML =
+        "<h3>Cartela " + card.id + "</h3>";
 
 
 
-let table=document.createElement("div");
-
-drawCard(card,table);
+        let area = document.createElement("div");
 
 
-box.appendChild(table);
+        drawCard(card, area);
 
 
-
-box.onclick=()=>{
-
-
-socket.emit(
-"chooseCard",
-{
-userId:userId,
-cardId:card.id
-}
-);
-
-
-};
+        box.appendChild(area);
 
 
 
-cartelas.appendChild(box);
+        box.onclick = () => {
 
 
-
-});
-
-
-});
+            selectedCard = card;
 
 
+            socket.emit(
+                "chooseCard",
+                {
+                    userId:userId,
+                    cardId:card.id
+                }
+            );
 
 
-
-socket.on("cardSelected",(card)=>{
-
-
-mycard.innerHTML="";
+        };
 
 
-let title=document.createElement("h2");
-
-title.innerHTML="Your Cartela "+card.id;
+        cartelas.appendChild(box);
 
 
-mycard.appendChild(title);
-
-
-drawCard(card,mycard);
-
+    });
 
 
 });
@@ -163,8 +137,97 @@ drawCard(card,mycard);
 
 
 
-socket.on("number",(data)=>{
 
-last.innerHTML=data.number;
+socket.on("cardSelected", (card) => {
+
+
+    selectedCard = card;
+
+    showMyCard();
+
+
+});
+
+
+
+
+
+
+
+function showMyCard(){
+
+
+    if(!selectedCard) return;
+
+
+    mycard.innerHTML =
+    "<h2>Your Cartela " + selectedCard.id + "</h2>";
+
+
+
+    let area = document.createElement("div");
+
+
+    drawCard(selectedCard, area);
+
+
+    mycard.appendChild(area);
+
+
+}
+
+
+
+
+
+
+
+socket.on("number", (data) => {
+
+
+    let number = data.number;
+
+
+    called.push(number);
+
+
+    last.innerHTML = number;
+
+
+
+    // play recorded voice
+    let voice = new Audio(
+        "/voices/" + number + ".mp3"
+    );
+
+
+    voice.play();
+
+
+
+    showMyCard();
+
+
+
+});
+
+
+
+
+
+
+
+socket.on("gameStart", () => {
+
+
+    called = [];
+
+
+    if(selectedCard){
+
+        showMyCard();
+
+    }
+
 
 });
