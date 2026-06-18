@@ -1,9 +1,9 @@
 {
   "name": "bingo-final",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "bot.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node bot.js"
   },
   "dependencies": {
     "axios": "^1.15.0",
@@ -15,16 +15,5 @@
     "socket.io": "^4.8.3"
   },
   "description": "",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/mikiyoarada-cmyk/ethiobingobot.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/mikiyoarada-cmyk/ethiobingobot/issues"
-  },
-  "homepage": "https://github.com/mikiyoarada-cmyk/ethiobingobot#readme"
+  "type": "commonjs"
 }
