@@ -8,47 +8,47 @@ const countdown = document.getElementById("countdown");
 let selectedCard = null;
 let called = [];
 
-let audioUnlocked = false;
+let soundOn = false;
+
+
+// sound enable button
+let soundButton = document.createElement("button");
+
+soundButton.innerHTML = "🔊 ENABLE SOUND";
+
+soundButton.style.position="fixed";
+soundButton.style.top="10px";
+soundButton.style.right="10px";
+soundButton.style.zIndex="99999";
+
+document.body.appendChild(soundButton);
 
 
 
-// Create invisible audio unlock button
-let btn = document.createElement("button");
+soundButton.onclick = async function(){
 
-btn.innerHTML = "🔊 ENABLE SOUND";
+try{
 
-btn.style.position="fixed";
-btn.style.top="10px";
-btn.style.right="10px";
-btn.style.zIndex="9999";
+let audio = new Audio("/voices/1.mp3");
 
-document.body.appendChild(btn);
+audio.volume=0.1;
+
+await audio.play();
+
+audio.pause();
+
+soundOn=true;
+
+soundButton.innerHTML="🔊 SOUND ENABLED";
+
+console.log("Sound enabled");
 
 
+}catch(e){
 
-btn.onclick = function(){
+console.log("Sound error:",e);
 
-let test = new Audio();
-
-test.src="/voices/1.mp3";
-
-test.volume=0;
-
-test.play()
-.then(()=>{
-
-audioUnlocked=true;
-
-btn.innerHTML="🔊 SOUND ON";
-
-btn.style.background="green";
-
-})
-.catch(()=>{
-
-console.log("audio blocked");
-
-});
+}
 
 
 };
@@ -58,35 +58,50 @@ console.log("audio blocked");
 
 
 
+function playNumberVoice(number){
 
 
-function playVoice(number){
+if(!soundOn){
 
-
-if(!audioUnlocked){
+console.log("Sound not enabled");
 
 return;
 
 }
 
 
-let voice = new Audio(
-"/voices/"+number+".mp3"
-);
+
+let audio = new Audio();
 
 
-voice.volume=1;
+audio.src =
+window.location.origin +
+"/voices/" +
+number +
+".mp3";
 
 
-voice.play()
-.catch(e=>{
+audio.volume=1;
 
-console.log(e);
+
+audio.load();
+
+
+audio.play()
+.then(()=>{
+
+console.log("Playing:",number);
+
+})
+.catch(err=>{
+
+console.log("Play failed:",err);
 
 });
 
 
 }
+
 
 
 
@@ -127,19 +142,19 @@ for(let j=0;j<5;j++){
 let n=card.numbers[i+j];
 
 
-let color="";
+let cls="";
 
 
 if(called.includes(n)){
 
-color="green";
+cls="marked";
 
 }
 
 
 if(n==="FREE"){
 
-color="yellow";
+cls="free";
 
 }
 
@@ -147,7 +162,7 @@ color="yellow";
 
 html+=`
 
-<td style="background:${color}">
+<td class="${cls}">
 ${n}
 </td>
 
@@ -164,7 +179,6 @@ html+="</tr>";
 
 
 html+="</table>";
-
 
 element.innerHTML=html;
 
@@ -194,7 +208,8 @@ let box=document.createElement("div");
 box.className="cartela";
 
 
-box.innerHTML="<h3>Cartela "+card.id+"</h3>";
+box.innerHTML=
+"<h3>Cartela "+card.id+"</h3>";
 
 
 
@@ -212,7 +227,6 @@ box.onclick=()=>{
 
 
 selectedCard=card;
-
 
 
 socket.emit(
@@ -246,7 +260,6 @@ cartelas.appendChild(box);
 
 
 
-
 socket.on("selected",(data)=>{
 
 
@@ -268,7 +281,6 @@ showMyCard();
 
 
 
-
 function showMyCard(){
 
 
@@ -278,13 +290,13 @@ if(!selectedCard)return;
 mycard.innerHTML="";
 
 
-let title=document.createElement("h2");
+let h=document.createElement("h2");
 
-title.innerHTML=
+h.innerHTML=
 "YOUR CARTELA "+selectedCard.id;
 
 
-mycard.appendChild(title);
+mycard.appendChild(h);
 
 
 
@@ -306,7 +318,6 @@ mycard.appendChild(area);
 
 
 
-
 socket.on("number",(data)=>{
 
 
@@ -316,16 +327,14 @@ called=data.called;
 last.innerHTML=data.number;
 
 
-
-// update only selected cartela
+// keep green marking
 
 showMyCard();
 
 
+// play voice
 
-// call voice
-
-playVoice(data.number);
+playNumberVoice(data.number);
 
 
 
