@@ -10,20 +10,14 @@ polling: true
 });
 
 bot.onText(//start/, (msg) => {
-bot.sendMessage(
-msg.chat.id,
-"🎯 BINGO GAME READY"
-);
+bot.sendMessage(msg.chat.id, "🎯 BINGO GAME READY");
 });
 
 bot.on("message", (msg) => {
 if (!msg.text) return;
 if (msg.text.startsWith("/")) return;
 
-bot.sendMessage(
-msg.chat.id,
-"📩 Message received"
-);
+bot.sendMessage(msg.chat.id, "📩 Message received");
 });
 
 app.get("/", (req, res) => {
