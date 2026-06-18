@@ -5,11 +5,15 @@ const TelegramBot = require("node-telegram-bot-api");
 
 const app = express();
 
-const bot = new TelegramBot(process.env.BOT_TOKEN, {
+const bot = new TelegramBot(
+process.env.BOT_TOKEN,
+{
 polling: true
-});
+}
+);
 
-const GAME_URL = "https://ethiobingo-1j5k.onrender.com/game.html";
+const GAME_URL =
+"https://ethiobingo-1j5k.onrender.com/game.html";
 
 bot.onText(//start/, (msg) => {
 bot.sendMessage(
