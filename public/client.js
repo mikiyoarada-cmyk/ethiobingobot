@@ -5,130 +5,167 @@ const mycard = document.getElementById("mycard");
 const last = document.getElementById("last");
 const countdown = document.getElementById("countdown");
 
+
 let userId = Math.floor(Math.random() * 999999);
 
 let selectedCard = null;
-let called = [];
+
+let calledNumbers = [];
 
 
 
-socket.on("countdown", (data) => {
+socket.on("countdown",(data)=>{
 
-    countdown.innerHTML =
-    "Game starts in: " + data.countdown + " seconds";
+countdown.innerHTML =
+"Game starts in: " + data.countdown + " seconds";
 
 });
 
 
 
-function drawCard(card, element) {
-
-    let html = `
-    <table>
-    <tr>
-    <th>B</th>
-    <th>I</th>
-    <th>N</th>
-    <th>G</th>
-    <th>O</th>
-    </tr>
-    `;
+function drawCard(card, element){
 
 
-    for(let i = 0; i < 25; i += 5) {
+let html = `
 
-        html += "<tr>";
+<table>
 
-        for(let j = 0; j < 5; j++) {
+<tr>
+<th>B</th>
+<th>I</th>
+<th>N</th>
+<th>G</th>
+<th>O</th>
+</tr>
 
-            let number = card.numbers[i+j];
-
-            let mark = "";
-
-
-            if(called.includes(number)) {
-                mark = "marked";
-            }
-
-
-            if(number === "FREE") {
-                mark = "free";
-            }
+`;
 
 
-            html += `
-            <td class="${mark}">
-            ${number}
-            </td>
-            `;
 
-        }
-
-        html += "</tr>";
-
-    }
+for(let row=0; row<5; row++){
 
 
-    html += "</table>";
+html += "<tr>";
 
-    element.innerHTML = html;
+
+
+for(let col=0; col<5; col++){
+
+
+let number = card.numbers[row*5+col];
+
+
+let style="";
+
+
+if(calledNumbers.includes(number)){
+style="marked";
+}
+
+
+
+if(number==="FREE"){
+style="free";
+}
+
+
+
+html += `
+
+<td class="${style}">
+${number}
+</td>
+
+`;
+
+
+}
+
+
+
+html += "</tr>";
+
+}
+
+
+
+html += "</table>";
+
+
+element.innerHTML = html;
+
 
 }
 
 
 
 
-socket.on("cardsList", (cards) => {
-
-
-    cartelas.innerHTML = "";
-
-
-    cards.forEach((card) => {
-
-
-        let box = document.createElement("div");
-
-        box.className = "cartela";
-
-
-        box.innerHTML =
-        "<h3>Cartela " + card.id + "</h3>";
 
 
 
-        let area = document.createElement("div");
+socket.on("cardsList",(cards)=>{
 
 
-        drawCard(card, area);
+cartelas.innerHTML="";
 
 
-        box.appendChild(area);
+cards.forEach((card)=>{
+
+
+let box=document.createElement("div");
+
+box.className="cartela";
+
+
+let title=document.createElement("h3");
+
+title.innerHTML="Cartela "+card.id;
+
+
+box.appendChild(title);
 
 
 
-        box.onclick = () => {
+let area=document.createElement("div");
 
 
-            selectedCard = card;
+drawCard(card,area);
 
 
-            socket.emit(
-                "chooseCard",
-                {
-                    userId:userId,
-                    cardId:card.id
-                }
-            );
+box.appendChild(area);
 
 
-        };
 
 
-        cartelas.appendChild(box);
+box.onclick=()=>{
 
 
-    });
+selectedCard=card;
+
+
+
+socket.emit(
+"chooseCard",
+{
+userId:userId,
+cardId:card.id
+}
+);
+
+
+
+showMyCard();
+
+
+};
+
+
+
+cartelas.appendChild(box);
+
+
+
+});
 
 
 });
@@ -138,12 +175,17 @@ socket.on("cardsList", (cards) => {
 
 
 
-socket.on("cardSelected", (card) => {
 
 
-    selectedCard = card;
 
-    showMyCard();
+socket.on("cardSelected",(card)=>{
+
+
+selectedCard=card;
+
+
+showMyCard();
+
 
 
 });
@@ -157,21 +199,33 @@ socket.on("cardSelected", (card) => {
 function showMyCard(){
 
 
-    if(!selectedCard) return;
-
-
-    mycard.innerHTML =
-    "<h2>Your Cartela " + selectedCard.id + "</h2>";
+if(!selectedCard)return;
 
 
 
-    let area = document.createElement("div");
+mycard.innerHTML="";
 
 
-    drawCard(selectedCard, area);
+let title=document.createElement("h2");
 
 
-    mycard.appendChild(area);
+title.innerHTML=
+"Your Cartela "+selectedCard.id;
+
+
+
+mycard.appendChild(title);
+
+
+
+let area=document.createElement("div");
+
+
+drawCard(selectedCard,area);
+
+
+mycard.appendChild(area);
+
 
 
 }
@@ -182,30 +236,57 @@ function showMyCard(){
 
 
 
-socket.on("number", (data) => {
 
 
-    let number = data.number;
+socket.on("number",(data)=>{
 
 
-    called.push(number);
-
-
-    last.innerHTML = number;
+let number=data.number;
 
 
 
-    // play recorded voice
-    let voice = new Audio(
-        "/voices/" + number + ".mp3"
-    );
-
-
-    voice.play();
+calledNumbers.push(number);
 
 
 
-    showMyCard();
+last.innerHTML=number;
+
+
+
+
+
+// PLAY VOICE FILE
+
+let audio = document.createElement("audio");
+
+
+audio.src =
+"/voices/"+number+".mp3";
+
+
+audio.autoplay=true;
+
+
+audio.volume=1;
+
+
+document.body.appendChild(audio);
+
+
+
+audio.play().catch(()=>{
+
+console.log("Click page once to allow sound");
+
+});
+
+
+
+
+
+// refresh selected cartela marks
+
+showMyCard();
 
 
 
@@ -217,17 +298,16 @@ socket.on("number", (data) => {
 
 
 
-socket.on("gameStart", () => {
 
 
-    called = [];
+socket.on("gameStart",()=>{
 
 
-    if(selectedCard){
+calledNumbers=[];
 
-        showMyCard();
 
-    }
+showMyCard();
+
 
 
 });
