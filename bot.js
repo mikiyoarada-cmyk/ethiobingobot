@@ -11,10 +11,12 @@ const bot = new TelegramBot(process.env.BOT_TOKEN, {
   polling: true
 });
 
-bot.onText(/^\/start$/, function(msg) {
+
+bot.onText(/^\/start$/, function (msg) {
+
   bot.sendMessage(
     msg.chat.id,
-    "🎯 ETHIO BINGO\n\nClick below to play",
+    "🎯 ETHIO BINGO\n\nClick PLAY BINGO to open game",
     {
       reply_markup: {
         inline_keyboard: [
@@ -28,14 +30,17 @@ bot.onText(/^\/start$/, function(msg) {
       }
     }
   );
+
 });
 
-app.get("/", function(req, res) {
+
+app.get("/", function(req, res){
   res.send("Ethio Bingo Running");
 });
 
+
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, function() {
+app.listen(PORT, function(){
   console.log("Server running");
 });
