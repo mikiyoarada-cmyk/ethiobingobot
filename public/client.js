@@ -1,35 +1,36 @@
-const socket = io();
-
-const cartelas = document.getElementById("cartelas");
-const mycard = document.getElementById("mycard");
-const last = document.getElementById("last");
-const countdown = document.getElementById("countdown");
+const socket=io();
 
 
-let userId = Math.floor(Math.random() * 999999);
-
-let selectedCard = null;
-
-let calledNumbers = [];
-
+const cartelas=document.getElementById("cartelas");
+const mycard=document.getElementById("mycard");
+const last=document.getElementById("last");
+const countdown=document.getElementById("countdown");
 
 
-socket.on("countdown",(data)=>{
+let selectedCard=null;
 
-countdown.innerHTML =
-"Game starts in: " + data.countdown + " seconds";
+let called=[];
+
+
+
+
+socket.on("countdown",(d)=>{
+
+countdown.innerHTML=
+"START IN "+d.countdown;
 
 });
 
 
 
-function drawCard(card, element){
 
 
-let html = `
+function show(card,element){
 
-<table>
 
+let html="<table>";
+
+html+=`
 <tr>
 <th>B</th>
 <th>I</th>
@@ -37,65 +38,68 @@ let html = `
 <th>G</th>
 <th>O</th>
 </tr>
-
 `;
 
 
 
-for(let row=0; row<5; row++){
+for(let i=0;i<25;i+=5){
 
 
-html += "<tr>";
+html+="<tr>";
+
+for(let j=0;j<5;j++){
 
 
-
-for(let col=0; col<5; col++){
-
-
-let number = card.numbers[row*5+col];
+let n=card.numbers[i+j];
 
 
-let style="";
+let color="";
 
 
-if(calledNumbers.includes(number)){
-style="marked";
+if(called.includes(n)){
+
+color="green";
+
+}
+
+
+if(n==="FREE"){
+
+color="yellow";
+
 }
 
 
 
-if(number==="FREE"){
-style="free";
-}
-
-
-
-html += `
-
-<td class="${style}">
-${number}
+html+=
+`
+<td style="
+background:${color};
+color:black;
+">
+${n}
 </td>
-
 `;
 
 
-}
-
-
-
-html += "</tr>";
 
 }
 
 
+html+="</tr>";
 
-html += "</table>";
+}
 
 
-element.innerHTML = html;
+
+html+="</table>";
+
+element.innerHTML=html;
 
 
 }
+
+
 
 
 
@@ -109,31 +113,28 @@ socket.on("cardsList",(cards)=>{
 cartelas.innerHTML="";
 
 
-cards.forEach((card)=>{
+cards.forEach(card=>{
 
 
 let box=document.createElement("div");
 
+
 box.className="cartela";
 
 
-let title=document.createElement("h3");
-
-title.innerHTML="Cartela "+card.id;
-
-
-box.appendChild(title);
+box.innerHTML=
+"<h3>Cartela "+card.id+"</h3>";
 
 
 
 let area=document.createElement("div");
 
 
-drawCard(card,area);
+show(card,area);
+
 
 
 box.appendChild(area);
-
 
 
 
@@ -143,15 +144,12 @@ box.onclick=()=>{
 selectedCard=card;
 
 
-
 socket.emit(
 "chooseCard",
 {
-userId:userId,
 cardId:card.id
 }
 );
-
 
 
 showMyCard();
@@ -168,6 +166,7 @@ cartelas.appendChild(box);
 });
 
 
+
 });
 
 
@@ -177,15 +176,16 @@ cartelas.appendChild(box);
 
 
 
+socket.on("selected",(data)=>{
 
-socket.on("cardSelected",(card)=>{
+
+selectedCard=data.card;
 
 
-selectedCard=card;
+called=data.called;
 
 
 showMyCard();
-
 
 
 });
@@ -202,7 +202,6 @@ function showMyCard(){
 if(!selectedCard)return;
 
 
-
 mycard.innerHTML="";
 
 
@@ -210,7 +209,7 @@ let title=document.createElement("h2");
 
 
 title.innerHTML=
-"Your Cartela "+selectedCard.id;
+"Selected Cartela "+selectedCard.id;
 
 
 
@@ -221,7 +220,7 @@ mycard.appendChild(title);
 let area=document.createElement("div");
 
 
-drawCard(selectedCard,area);
+show(selectedCard,area);
 
 
 mycard.appendChild(area);
@@ -236,63 +235,36 @@ mycard.appendChild(area);
 
 
 
-
-
 socket.on("number",(data)=>{
 
 
-let number=data.number;
+called=data.called;
+
+
+last.innerHTML=data.number;
 
 
 
-calledNumbers.push(number);
-
-
-
-last.innerHTML=number;
-
-
-
-
-
-// PLAY VOICE FILE
-
-let audio = document.createElement("audio");
-
-
-audio.src =
-"/voices/"+number+".mp3";
-
-
-audio.autoplay=true;
-
-
-audio.volume=1;
-
-
-document.body.appendChild(audio);
-
-
-
-audio.play().catch(()=>{
-
-console.log("Click page once to allow sound");
-
-});
-
-
-
-
-
-// refresh selected cartela marks
+if(selectedCard){
 
 showMyCard();
 
+}
+
+
+
+// play matching voice
+
+let audio=new Audio(
+"/voices/"+data.number+".mp3"
+);
+
+
+audio.play();
+
 
 
 });
-
-
 
 
 
@@ -303,11 +275,14 @@ showMyCard();
 socket.on("gameStart",()=>{
 
 
-calledNumbers=[];
+called=[];
 
+
+if(selectedCard){
 
 showMyCard();
 
+}
 
 
 });
