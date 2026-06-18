@@ -7,16 +7,24 @@ const app = express();
 
 const GAME_URL = "https://ethiobingo-1j5k.onrender.com/game.html";
 
-const bot = new TelegramBot(process.env.BOT_TOKEN, {
-  polling: true
-});
+const bot = new TelegramBot(process.env.BOT_TOKEN);
+
+async function startBot() {
+  await bot.deleteWebHook();
+
+  bot.startPolling();
+
+  console.log("Telegram bot started");
+}
+
+startBot();
 
 
-bot.onText(/^\/start$/, function (msg) {
+bot.onText(/^\/start$/, (msg) => {
 
   bot.sendMessage(
     msg.chat.id,
-    "🎯 ETHIO BINGO\n\nClick PLAY BINGO to open game",
+    "🎯 ETHIO BINGO\n\nClick PLAY BINGO",
     {
       reply_markup: {
         inline_keyboard: [
@@ -34,13 +42,13 @@ bot.onText(/^\/start$/, function (msg) {
 });
 
 
-app.get("/", function(req, res){
+app.get("/", (req, res) => {
   res.send("Ethio Bingo Running");
 });
 
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, function(){
+app.listen(PORT, () => {
   console.log("Server running");
 });
