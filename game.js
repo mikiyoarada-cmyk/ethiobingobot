@@ -2,130 +2,200 @@ const { Server } = require("socket.io");
 
 let io;
 
-let numbersPool = [];
+let cards = [];
 let calledNumbers = [];
 
-let userCards = {};
-
+let gameInterval;
 let countdown = 30;
-let interval;
-let countdownInterval;
 
-const SIZE = 25;
 
-/* ================= CREATE CARD ================= */
-function createCard() {
-  let nums = [];
+/* CREATE 600 CARTELAS */
+function createCards(){
 
-  while (nums.length < SIZE) {
-    let n = Math.floor(Math.random() * 75) + 1;
-    if (!nums.includes(n)) nums.push(n);
+  cards = [];
+
+  for(let i = 1; i <= 600; i++){
+
+    let numbers = [];
+
+    while(numbers.length < 25){
+
+      let n = Math.floor(Math.random()*75)+1;
+
+      if(!numbers.includes(n)){
+        numbers.push(n);
+      }
+
+    }
+
+    cards.push({
+      id:i,
+      numbers:numbers
+    });
+
   }
 
-  return nums;
 }
 
-/* ================= GET USER CARD ================= */
-function getCard(userId, cardId) {
-  if (!userCards[userId]) {
-    userCards[userId] = {
-      numbers: createCard(),
-      marked: []
-    };
-  }
 
-  return userCards[userId];
-}
+/* COUNTDOWN */
+function startCountdown(){
 
-/* ================= COUNTDOWN ================= */
-function startCountdown() {
   countdown = 30;
 
-  countdownInterval = setInterval(() => {
-    io.emit("countdown", { countdown });
+  let timer = setInterval(()=>{
+
+    io.emit("countdown", {
+      countdown: countdown
+    });
+
 
     countdown--;
 
-    if (countdown < 0) {
-      clearInterval(countdownInterval);
+
+    if(countdown < 0){
+
+      clearInterval(timer);
+
       startGame();
+
     }
-  }, 1000);
+
+
+  },1000);
+
 }
 
-/* ================= START GAME ================= */
-function startGame() {
-  numbersPool = Array.from({ length: 75 }, (_, i) => i + 1);
-  calledNumbers = [];
+
+
+/* START GAME */
+function startGame(){
+
+  calledNumbers=[];
 
   io.emit("gameStart");
 
-  interval = setInterval(drawNumber, 3000);
+
+  gameInterval=setInterval(()=>{
+
+    callNumber();
+
+  },3000);
+
+
 }
 
-/* ================= DRAW NUMBER ================= */
-function drawNumber() {
-  if (numbersPool.length === 0) return endGame();
 
-  const index = Math.floor(Math.random() * numbersPool.length);
-  const number = numbersPool.splice(index, 1)[0];
 
-  calledNumbers.push(number);
+/* CALL NUMBER */
+function callNumber(){
 
-  io.emit("number", { number });
+  if(calledNumbers.length>=75){
 
-  checkWinner(number);
-}
+    endGame();
 
-/* ================= WIN CHECK ================= */
-function checkWinner(number) {
-  for (let userId in userCards) {
-    let u = userCards[userId];
+    return;
 
-    if (u.numbers.includes(number)) {
-      u.marked.push(number);
-    }
-
-    if (u.marked.length === SIZE) {
-      io.emit("winner", { userId });
-      return endGame();
-    }
   }
-}
 
-/* ================= END GAME ================= */
-function endGame() {
-  clearInterval(interval);
 
-  io.emit("gameEnd");
+  let n;
 
-  setTimeout(resetGame, 5000);
-}
 
-/* ================= RESET ================= */
-function resetGame() {
-  userCards = [];
-  calledNumbers = [];
+  do{
 
-  io.emit("reset");
+    n=Math.floor(Math.random()*75)+1;
 
-  startCountdown();
-}
+  }while(calledNumbers.includes(n));
 
-/* ================= INIT ================= */
-function init(server) {
-  io = new Server(server, { cors: { origin: "*" } });
 
-  io.on("connection", (socket) => {
+  calledNumbers.push(n);
 
-    socket.emit("cardsList", []);
 
-    socket.on("chooseCard", ({ userId }) => {
-      socket.emit("cardSelected", getCard(userId));
-    });
+  io.emit("number",{
+    number:n
   });
 
-  startCountdown();
+
 }
 
-module.exports = { init };
+
+
+/* END */
+function endGame(){
+
+ clearInterval(gameInterval);
+
+
+ io.emit("gameEnd");
+
+
+ setTimeout(()=>{
+
+   startCountdown();
+
+ },5000);
+
+
+}
+
+
+
+/* SERVER */
+function init(server){
+
+
+ io = new Server(server,{
+   cors:{
+    origin:"*"
+   }
+ });
+
+
+ createCards();
+
+
+ io.on("connection",(socket)=>{
+
+
+   socket.emit(
+    "cardsList",
+    cards
+   );
+
+
+   socket.on("chooseCard",(data)=>{
+
+
+      let card = cards.find(
+        c=>c.id == data.cardId
+      );
+
+
+      if(card){
+
+        socket.emit(
+          "cardSelected",
+          card
+        );
+
+      }
+
+
+   });
+
+
+
+ });
+
+
+ startCountdown();
+
+
+}
+
+
+
+module.exports={
+ init
+};
