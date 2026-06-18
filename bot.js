@@ -6,26 +6,26 @@ const TelegramBot = require("node-telegram-bot-api");
 const app = express();
 
 const bot = new TelegramBot(process.env.BOT_TOKEN, {
-polling: true
+  polling: true
 });
 
-bot.onText(//start/, (msg) => {
-bot.sendMessage(msg.chat.id, "BINGO GAME READY");
+bot.onText(/\/start/, (msg) => {
+  bot.sendMessage(msg.chat.id, "BINGO GAME READY");
 });
 
 bot.on("message", (msg) => {
-if (!msg.text) return;
-if (msg.text.startsWith("/")) return;
+  if (!msg.text) return;
+  if (msg.text.startsWith("/")) return;
 
-bot.sendMessage(msg.chat.id, "Message received");
+  bot.sendMessage(msg.chat.id, "Message received");
 });
 
 app.get("/", (req, res) => {
-res.send("Bot Running");
+  res.send("Bot Running");
 });
 
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-console.log("Server running");
+  console.log("Server running");
 });
