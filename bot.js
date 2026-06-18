@@ -2,22 +2,17 @@ require("dotenv").config();
 
 const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
+const path = require("path");
 
 const app = express();
 
+app.use(express.static(path.join(__dirname, "public")));
+
 const GAME_URL = "https://ethiobingo-1j5k.onrender.com/game.html";
 
-const bot = new TelegramBot(process.env.BOT_TOKEN);
-
-async function startBot() {
-  await bot.deleteWebHook();
-
-  bot.startPolling();
-
-  console.log("Telegram bot started");
-}
-
-startBot();
+const bot = new TelegramBot(process.env.BOT_TOKEN, {
+  polling: true
+});
 
 
 bot.onText(/^\/start$/, (msg) => {
