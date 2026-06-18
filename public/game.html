@@ -1,71 +1,57 @@
 <!DOCTYPE html>
-
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>Bingo Game</title>
+<title>Ethio Bingo</title>
 
 <script src="/socket.io/socket.io.js"></script>
-
 <script defer src="client.js"></script>
 
 <style>
-
 body{
 background:#111;
-color:#fff;
-font-family:Arial,sans-serif;
+color:white;
+font-family:Arial;
 text-align:center;
-margin:0;
+}
+
+#cartelas{
+display:grid;
+grid-template-columns:repeat(10,1fr);
+gap:8px;
 padding:20px;
 }
 
-h1{
-margin-bottom:10px;
-}
-
-#countdown{
-font-size:28px;
-color:yellow;
-margin-bottom:20px;
-}
-
-#last{
-font-size:40px;
-font-weight:bold;
-color:#00ff00;
-margin:20px;
-}
-
-#card{
-display:flex;
-flex-wrap:wrap;
-justify-content:center;
-gap:5px;
-}
-
-button{
-padding:8px;
-border:none;
-cursor:pointer;
+.cartela{
+background:#222;
+padding:15px;
 border-radius:5px;
+cursor:pointer;
+}
+
+.cartela:hover{
+background:green;
+}
+
+#mycard{
+margin:20px;
 }
 
 .num{
 display:inline-block;
 background:#333;
-padding:6px;
-margin:2px;
-border-radius:4px;
-min-width:35px;
+padding:8px;
+margin:3px;
 }
 
-.selected{
-background:green;
+#last{
+font-size:40px;
+color:yellow;
 }
 
+#countdown{
+font-size:30px;
+color:red;
+}
 </style>
 
 </head>
@@ -74,15 +60,22 @@ background:green;
 
 <h1>🎯 ETHIO BINGO</h1>
 
-<h2 id="countdown">Waiting...</h2>
+<h2 id="countdown">Starting...</h2>
 
 <h2>Last Called Number</h2>
 
 <div id="last">-</div>
 
-<h2>Choose Cartela</h2>
 
-<div id="card"></div>
+<h2>Select Your Cartela</h2>
+
+<div id="cartelas"></div>
+
+
+<h2>Your Cartela</h2>
+
+<div id="mycard"></div>
+
 
 </body>
 </html>

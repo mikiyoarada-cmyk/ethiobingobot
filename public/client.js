@@ -1,89 +1,68 @@
 const socket = io();
 
-const countdownEl = document.getElementById("countdown");
-const cardEl = document.getElementById("card");
-const lastEl = document.getElementById("last");
+const cartelas = document.getElementById("cartelas");
+const mycard = document.getElementById("mycard");
+const last = document.getElementById("last");
+const countdown = document.getElementById("countdown");
 
-let userId = Math.floor(Math.random() * 999999);
 
-/* ================= SHOW 600 CARTELAS ================= */
+let userId = Math.floor(Math.random()*999999);
 
-socket.on("cardsList", (cards) => {
 
-cardEl.innerHTML = "";
+socket.on("countdown",(data)=>{
+countdown.innerHTML="Game starts in "+data.countdown+" seconds";
+});
 
-cards.forEach(card => {
 
-```
-const btn = document.createElement("button");
+socket.on("cardsList",(cards)=>{
 
-btn.innerText = "Cartela #" + card.id;
+cartelas.innerHTML="";
 
-btn.style.margin = "4px";
+cards.forEach(card=>{
 
-btn.onclick = () => {
+let div=document.createElement("div");
 
-  socket.emit("chooseCard", {
-    userId,
-    cardId: card.id
-  });
+div.className="cartela";
+
+div.innerHTML="Cartela "+card.id;
+
+div.onclick=()=>{
+
+socket.emit("chooseCard",{
+userId:userId,
+cardId:card.id
+});
 
 };
 
-cardEl.appendChild(btn);
-```
+cartelas.appendChild(div);
 
 });
 
 });
 
-/* ================= SELECTED CARD ================= */
 
-socket.on("cardSelected", (card) => {
+socket.on("cardSelected",(card)=>{
 
-cardEl.innerHTML =
-"<h3>Selected Cartela #" + card.id + "</h3>" +
-card.numbers.map(n =>
-`<span class="num">${n}</span>`
-).join("");
+mycard.innerHTML="";
 
-});
+card.numbers.forEach(n=>{
 
-/* ================= COUNTDOWN ================= */
+let span=document.createElement("span");
 
-socket.on("countdown", (seconds) => {
-countdownEl.innerText = "Starts In: " + seconds;
-});
+span.className="num";
 
-/* ================= GAME START ================= */
+span.innerHTML=n;
 
-socket.on("gameStart", () => {
-countdownEl.innerText = "GAME STARTED";
-});
-
-/* ================= CALLED NUMBER ================= */
-
-socket.on("number", (number) => {
-lastEl.innerText = number;
-});
-
-/* ================= WINNER ================= */
-
-socket.on("winner", (data) => {
-
-alert(
-"WINNER USER: " +
-data.userId +
-" | CARTELA: " +
-data.cardId
-);
+mycard.appendChild(span);
 
 });
 
-/* ================= RESET ================= */
+});
 
-socket.on("reset", () => {
 
-location.reload();
+socket.on("number",(data)=>{
+
+last.innerHTML=data.number;
 
 });
