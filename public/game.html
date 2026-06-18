@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html>
 <head>
+
 <title>Ethio Bingo</title>
 
 <script src="/socket.io/socket.io.js"></script>
 <script defer src="client.js"></script>
 
 <style>
+
 body{
 background:#111;
 color:white;
@@ -14,37 +16,7 @@ font-family:Arial;
 text-align:center;
 }
 
-#cartelas{
-display:grid;
-grid-template-columns:repeat(10,1fr);
-gap:8px;
-padding:20px;
-}
-
-.cartela{
-background:#222;
-padding:15px;
-border-radius:5px;
-cursor:pointer;
-}
-
-.cartela:hover{
-background:green;
-}
-
-#mycard{
-margin:20px;
-}
-
-.num{
-display:inline-block;
-background:#333;
-padding:8px;
-margin:3px;
-}
-
-#last{
-font-size:40px;
+h1{
 color:yellow;
 }
 
@@ -52,29 +24,122 @@ color:yellow;
 font-size:30px;
 color:red;
 }
+
+#cartelas{
+display:grid;
+grid-template-columns:repeat(5,1fr);
+gap:15px;
+padding:20px;
+}
+
+
+.cartela{
+
+background:#222;
+border:2px solid #555;
+border-radius:10px;
+padding:10px;
+cursor:pointer;
+
+}
+
+
+.cartela:hover{
+
+background:green;
+
+}
+
+
+.title{
+
+color:yellow;
+font-size:18px;
+margin-bottom:8px;
+
+}
+
+
+
+.card{
+
+display:grid;
+grid-template-columns:repeat(5,40px);
+gap:3px;
+
+}
+
+
+
+.number{
+
+background:#333;
+padding:8px 0;
+border-radius:4px;
+
+}
+
+
+
+#mycard{
+
+margin:30px;
+
+}
+
+
+
+.big{
+
+font-size:45px;
+color:#00ff00;
+
+}
+
 </style>
+
 
 </head>
 
+
 <body>
+
 
 <h1>🎯 ETHIO BINGO</h1>
 
-<h2 id="countdown">Starting...</h2>
 
-<h2>Last Called Number</h2>
+<div id="countdown">
+Waiting...
+</div>
 
-<div id="last">-</div>
+
+<h2>
+Called Number
+</h2>
 
 
-<h2>Select Your Cartela</h2>
+<div id="last" class="big">
+-
+</div>
+
+
+
+<h2>
+Choose Your Cartela
+</h2>
+
 
 <div id="cartelas"></div>
 
 
-<h2>Your Cartela</h2>
+
+<h2>
+Your Selected Cartela
+</h2>
+
 
 <div id="mycard"></div>
+
 
 
 </body>
