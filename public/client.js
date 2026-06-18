@@ -1,64 +1,129 @@
 const socket = io();
 
-const cartelas = document.getElementById("cartelas");
-const mycard = document.getElementById("mycard");
-const last = document.getElementById("last");
-const countdown = document.getElementById("countdown");
+
+const cartelas=document.getElementById("cartelas");
+const mycard=document.getElementById("mycard");
+const last=document.getElementById("last");
+const countdown=document.getElementById("countdown");
 
 
-let userId = Math.floor(Math.random()*999999);
+let userId=Math.floor(Math.random()*999999);
+
 
 
 socket.on("countdown",(data)=>{
-countdown.innerHTML="Game starts in "+data.countdown+" seconds";
+
+countdown.innerHTML=
+"Game starts in "+data.countdown+" seconds";
+
 });
+
+
+
+function showCard(card,element){
+
+
+let html="";
+
+
+html += "<div class='bingo'>";
+
+
+["B","I","N","G","O"].forEach(x=>{
+
+html+=
+"<div class='cell letter'>"+x+"</div>";
+
+});
+
+
+
+card.numbers.forEach(n=>{
+
+html+=
+"<div class='cell'>"+n+"</div>";
+
+});
+
+
+html+="</div>";
+
+
+element.innerHTML=html;
+
+}
+
+
 
 
 socket.on("cardsList",(cards)=>{
 
+
 cartelas.innerHTML="";
+
 
 cards.forEach(card=>{
 
-let div=document.createElement("div");
 
-div.className="cartela";
+let box=document.createElement("div");
 
-div.innerHTML="Cartela "+card.id;
+box.className="cartela";
 
-div.onclick=()=>{
 
-socket.emit("chooseCard",{
+box.innerHTML=
+"<div class='title'>Cartela "+card.id+"</div>";
+
+
+
+let temp=document.createElement("div");
+
+showCard(card,temp);
+
+
+box.innerHTML+=temp.innerHTML;
+
+
+
+box.onclick=()=>{
+
+
+socket.emit(
+"chooseCard",
+{
 userId:userId,
 cardId:card.id
-});
+}
+);
+
 
 };
 
-cartelas.appendChild(div);
+
+
+cartelas.appendChild(box);
+
 
 });
 
+
 });
+
+
 
 
 socket.on("cardSelected",(card)=>{
 
-mycard.innerHTML="";
 
-card.numbers.forEach(n=>{
+mycard.innerHTML=
+"<h3>Selected Cartela "+card.id+"</h3>";
 
-let span=document.createElement("span");
 
-span.className="num";
+showCard(card,mycard);
 
-span.innerHTML=n;
-
-mycard.appendChild(span);
 
 });
 
-});
+
 
 
 socket.on("number",(data)=>{

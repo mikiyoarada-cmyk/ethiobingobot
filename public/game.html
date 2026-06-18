@@ -16,20 +16,14 @@ font-family:Arial;
 text-align:center;
 }
 
-h1{
-color:yellow;
-}
-
-#countdown{
-font-size:30px;
-color:red;
-}
 
 #cartelas{
+
 display:grid;
-grid-template-columns:repeat(5,1fr);
+grid-template-columns:repeat(4,1fr);
 gap:15px;
 padding:20px;
+
 }
 
 
@@ -46,36 +40,44 @@ cursor:pointer;
 
 .cartela:hover{
 
-background:green;
+background:#006600;
 
 }
 
 
 .title{
 
-color:yellow;
 font-size:18px;
+color:yellow;
 margin-bottom:8px;
 
 }
 
 
-
-.card{
+.bingo{
 
 display:grid;
-grid-template-columns:repeat(5,40px);
-gap:3px;
+grid-template-columns:repeat(5,35px);
+gap:2px;
+justify-content:center;
 
 }
 
 
 
-.number{
+.cell{
 
 background:#333;
-padding:8px 0;
-border-radius:4px;
+padding:7px 0;
+font-weight:bold;
+
+}
+
+
+.letter{
+
+background:red;
+color:white;
 
 }
 
@@ -83,21 +85,20 @@ border-radius:4px;
 
 #mycard{
 
-margin:30px;
+margin:20px;
 
 }
 
 
+#last{
 
-.big{
-
-font-size:45px;
-color:#00ff00;
+font-size:40px;
+color:lime;
 
 }
+
 
 </style>
-
 
 </head>
 
@@ -108,9 +109,9 @@ color:#00ff00;
 <h1>🎯 ETHIO BINGO</h1>
 
 
-<div id="countdown">
+<h2 id="countdown">
 Waiting...
-</div>
+</h2>
 
 
 <h2>
@@ -118,14 +119,13 @@ Called Number
 </h2>
 
 
-<div id="last" class="big">
+<div id="last">
 -
 </div>
 
 
-
 <h2>
-Choose Your Cartela
+Choose Cartela
 </h2>
 
 
@@ -134,13 +134,13 @@ Choose Your Cartela
 
 
 <h2>
-Your Selected Cartela
+Your Cartela
 </h2>
 
 
 <div id="mycard"></div>
 
 
-
 </body>
+
 </html>
