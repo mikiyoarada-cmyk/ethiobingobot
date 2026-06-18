@@ -9,21 +9,36 @@ const bot = new TelegramBot(process.env.BOT_TOKEN, {
   polling: true
 });
 
+const GAME_URL = "https://ethiobingo-1j5k.onrender.com/game.html";
+
+/* START */
 bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, "BINGO GAME READY");
+
+  bot.sendMessage(
+    msg.chat.id,
+    "🎯 ETHIO BINGO\n\nClick PLAY BINGO",
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: "🎮 PLAY BINGO",
+              url: GAME_URL
+            }
+          ]
+        ]
+      }
+    }
+  );
+
 });
 
-bot.on("message", (msg) => {
-  if (!msg.text) return;
-  if (msg.text.startsWith("/")) return;
-
-  bot.sendMessage(msg.chat.id, "Message received");
-});
-
+/* HOME PAGE */
 app.get("/", (req, res) => {
-  res.send("Bot Running");
+  res.send("Ethio Bingo Running");
 });
 
+/* START SERVER */
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
