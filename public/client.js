@@ -8,47 +8,88 @@ const countdown = document.getElementById("countdown");
 let selectedCard = null;
 let called = [];
 
-let soundReady = false;
-
-
-// unlock browser audio
-document.addEventListener("click", function(){
-
-    soundReady = true;
-
-}, {once:true});
+let audioUnlocked = false;
 
 
 
+// Create invisible audio unlock button
+let btn = document.createElement("button");
 
-// create audio folder path
+btn.innerHTML = "🔊 ENABLE SOUND";
+
+btn.style.position="fixed";
+btn.style.top="10px";
+btn.style.right="10px";
+btn.style.zIndex="9999";
+
+document.body.appendChild(btn);
+
+
+
+btn.onclick = function(){
+
+let test = new Audio();
+
+test.src="/voices/1.mp3";
+
+test.volume=0;
+
+test.play()
+.then(()=>{
+
+audioUnlocked=true;
+
+btn.innerHTML="🔊 SOUND ON";
+
+btn.style.background="green";
+
+})
+.catch(()=>{
+
+console.log("audio blocked");
+
+});
+
+
+};
+
+
+
+
+
+
+
+
 function playVoice(number){
 
-    if(!soundReady) return;
 
+if(!audioUnlocked){
 
-    let audio = new Audio();
-
-    audio.src = "/voices/" + number + ".mp3";
-
-    audio.volume = 1;
-
-    audio.load();
-
-
-    audio.play()
-    .then(()=>{
-
-        console.log("Playing voice:",number);
-
-    })
-    .catch(err=>{
-
-        console.log("Voice blocked:",err);
-
-    });
+return;
 
 }
+
+
+let voice = new Audio(
+"/voices/"+number+".mp3"
+);
+
+
+voice.volume=1;
+
+
+voice.play()
+.catch(e=>{
+
+console.log(e);
+
+});
+
+
+}
+
+
+
 
 
 
@@ -57,7 +98,7 @@ function playVoice(number){
 function drawCard(card,element){
 
 
-let html = `
+let html=`
 
 <table>
 
@@ -76,38 +117,38 @@ let html = `
 for(let i=0;i<25;i+=5){
 
 
-html += "<tr>";
+html+="<tr>";
 
 
 
 for(let j=0;j<5;j++){
 
 
-let number = card.numbers[i+j];
+let n=card.numbers[i+j];
 
 
-let cls="";
+let color="";
 
 
-if(called.includes(number)){
+if(called.includes(n)){
 
-cls="marked";
-
-}
-
-
-if(number==="FREE"){
-
-cls="free";
+color="green";
 
 }
 
 
+if(n==="FREE"){
 
-html += `
+color="yellow";
 
-<td class="${cls}">
-${number}
+}
+
+
+
+html+=`
+
+<td style="background:${color}">
+${n}
 </td>
 
 `;
@@ -117,38 +158,19 @@ ${number}
 }
 
 
-html += "</tr>";
+html+="</tr>";
 
 }
 
 
-
-html += "</table>";
-
+html+="</table>";
 
 
-element.innerHTML = html;
-
+element.innerHTML=html;
 
 
 }
 
-
-
-
-
-
-
-
-
-socket.on("countdown",(data)=>{
-
-
-countdown.innerHTML =
-"GAME STARTS IN "+data.countdown+" SECONDS";
-
-
-});
 
 
 
@@ -163,7 +185,6 @@ socket.on("cardsList",(cards)=>{
 cartelas.innerHTML="";
 
 
-
 cards.forEach(card=>{
 
 
@@ -173,13 +194,7 @@ let box=document.createElement("div");
 box.className="cartela";
 
 
-
-let title=document.createElement("h3");
-
-title.innerHTML="Cartela "+card.id;
-
-
-box.appendChild(title);
+box.innerHTML="<h3>Cartela "+card.id+"</h3>";
 
 
 
@@ -193,8 +208,7 @@ box.appendChild(area);
 
 
 
-
-box.onclick=function(){
+box.onclick=()=>{
 
 
 selectedCard=card;
@@ -209,9 +223,7 @@ cardId:card.id
 );
 
 
-
 showMyCard();
-
 
 
 };
@@ -223,7 +235,6 @@ cartelas.appendChild(box);
 
 
 });
-
 
 
 });
@@ -257,43 +268,36 @@ showMyCard();
 
 
 
+
 function showMyCard(){
 
 
-if(!selectedCard) return;
-
+if(!selectedCard)return;
 
 
 mycard.innerHTML="";
 
 
+let title=document.createElement("h2");
 
-let h=document.createElement("h2");
-
-
-h.innerHTML=
+title.innerHTML=
 "YOUR CARTELA "+selectedCard.id;
 
 
-
-mycard.appendChild(h);
+mycard.appendChild(title);
 
 
 
 let area=document.createElement("div");
 
 
-
 drawCard(selectedCard,area);
-
 
 
 mycard.appendChild(area);
 
 
-
 }
-
 
 
 
@@ -313,12 +317,14 @@ last.innerHTML=data.number;
 
 
 
-// mark selected cartela
+// update only selected cartela
+
 showMyCard();
 
 
 
-// play matching voice
+// call voice
+
 playVoice(data.number);
 
 
