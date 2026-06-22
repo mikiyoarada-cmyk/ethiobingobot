@@ -2,44 +2,48 @@ const { Server } = require("socket.io");
 
 let io;
 
-let cards=[];
-let calledNumbers=[];
-let pool=[];
+let cards = [];
+let calledNumbers = [];
+let pool = [];
 
-let players=new Map();
+let selectedCards = new Map();
 
 let countdownTimer;
 let gameTimer;
 
-let started=false;
+let waitingStarted = false;
+let gameStarted = false;
 
 
 
-function makeNumbers(min,max){
+function randomNumbers(min,max){
 
-let a=[];
+let arr=[];
 
-while(a.length<5){
+while(arr.length<5){
 
 let n=Math.floor(Math.random()*(max-min+1))+min;
 
-if(!a.includes(n)) a.push(n);
+if(!arr.includes(n)){
+arr.push(n);
+}
 
 }
 
-return a;
+return arr;
 
 }
+
 
 
 
 function createCard(id){
 
-let B=makeNumbers(1,15);
-let I=makeNumbers(16,30);
-let N=makeNumbers(31,45);
-let G=makeNumbers(46,60);
-let O=makeNumbers(61,75);
+let B=randomNumbers(1,15);
+let I=randomNumbers(16,30);
+let N=randomNumbers(31,45);
+let G=randomNumbers(46,60);
+let O=randomNumbers(61,75);
 
 
 N[2]="FREE";
@@ -59,18 +63,22 @@ numbers.push(O[i]);
 }
 
 
+
 return {
-id,
-numbers
+id:id,
+numbers:numbers
 };
 
 }
 
 
 
-function createCards(){
+
+
+function create600Cards(){
 
 cards=[];
+
 
 for(let i=1;i<=600;i++){
 
@@ -78,65 +86,24 @@ cards.push(createCard(i));
 
 }
 
-}
-
-
-
-
-function startWaiting(){
-
-
-clearInterval(countdownTimer);
-
-
-let t=30;
-
-
-countdownTimer=setInterval(()=>{
-
-
-io.emit("countdown",{countdown:t});
-
-
-t--;
-
-
-if(t<0){
-
-clearInterval(countdownTimer);
-
-
-if(totalPicked()>=2){
-
-startGame();
-
-}else{
-
-startWaiting();
 
 }
 
 
-}
 
-
-},1000);
-
-
-
-}
 
 
 
 
 function totalPicked(){
 
+
 let total=0;
 
 
-players.forEach(x=>{
+selectedCards.forEach(list=>{
 
-total+=x.length;
+total += list.length;
 
 });
 
@@ -149,13 +116,80 @@ return total;
 
 
 
+
+
+function start30Countdown(){
+
+
+if(waitingStarted || gameStarted)return;
+
+
+waitingStarted=true;
+
+
+let time=30;
+
+
+countdownTimer=setInterval(()=>{
+
+
+io.emit("countdown",{
+countdown:time
+});
+
+
+time--;
+
+
+
+if(time<0){
+
+
+clearInterval(countdownTimer);
+
+
+if(totalPicked()>=2){
+
+startGame();
+
+}else{
+
+waitingStarted=false;
+
+start30Countdown();
+
+}
+
+
+}
+
+
+
+},1000);
+
+
+
+}
+
+
+
+
+
+
+
+
+
 function startGame(){
 
 
-if(started)return;
+if(gameStarted)return;
 
 
-started=true;
+gameStarted=true;
+
+
+waitingStarted=false;
+
 
 
 pool=[];
@@ -168,7 +202,9 @@ pool.push(i);
 }
 
 
+
 calledNumbers=[];
+
 
 
 io.emit("gameStart");
@@ -178,10 +214,14 @@ io.emit("gameStart");
 gameTimer=setInterval(()=>{
 
 
-let index=Math.floor(Math.random()*pool.length);
+let index=Math.floor(
+Math.random()*pool.length
+);
+
 
 
 let number=pool.splice(index,1)[0];
+
 
 
 calledNumbers.push(number);
@@ -198,11 +238,13 @@ called:calledNumbers
 
 
 
+
 if(pool.length===0){
 
 endGame();
 
 }
+
 
 
 },2000);
@@ -215,13 +257,17 @@ endGame();
 
 
 
+
+
+
+
 function endGame(){
 
 
 clearInterval(gameTimer);
 
 
-started=false;
+gameStarted=false;
 
 
 io.emit("gameEnd");
@@ -229,11 +275,14 @@ io.emit("gameEnd");
 
 setTimeout(()=>{
 
-createCards();
 
-players.clear();
+create600Cards();
 
-startWaiting();
+
+selectedCards.clear();
+
+
+io.emit("cardsList",cards);
 
 
 },5000);
@@ -247,13 +296,17 @@ startWaiting();
 
 
 
+
+
 function init(server){
 
 
 io=new Server(server);
 
 
-createCards();
+
+create600Cards();
+
 
 
 
@@ -268,49 +321,75 @@ socket.emit("cardsList",cards);
 socket.on("chooseCard",(data)=>{
 
 
+
 let card=cards.find(
 c=>c.id===data.cardId
 );
 
 
-if(!players.has(socket.id)){
 
-players.set(socket.id,[]);
+if(!card)return;
+
+
+
+if(!selectedCards.has(socket.id)){
+
+selectedCards.set(socket.id,[]);
+
+}
+
+
+
+let userCards=selectedCards.get(socket.id);
+
+
+
+if(!userCards.includes(card.id)){
+
+userCards.push(card.id);
 
 }
 
-
-let list=players.get(socket.id);
-
-
-if(!list.includes(card.id)){
-
-list.push(card.id);
-
-}
 
 
 socket.emit("cardSelected",card);
 
 
 
+console.log(
+"Total picked:",
+totalPicked()
+);
+
+
+
+
+if(totalPicked()>=2 && !gameStarted){
+
+start30Countdown();
+
+}
+
+
+
 });
+
+
 
 
 
 socket.on("disconnect",()=>{
 
-players.delete(socket.id);
 
-});
-
+selectedCards.delete(socket.id);
 
 
 });
 
 
 
-startWaiting();
+
+});
 
 
 
