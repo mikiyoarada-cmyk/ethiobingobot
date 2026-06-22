@@ -8,7 +8,6 @@
 <script src="/socket.io/socket.io.js"></script>
 <script defer src="client.js"></script>
 
-
 <style>
 
 body{
@@ -16,96 +15,118 @@ background:#111;
 color:white;
 font-family:Arial;
 text-align:center;
+margin:0;
+padding:0;
 }
 
+#countdown{
+color:yellow;
+font-size:30px;
+}
+
+#last{
+font-size:50px;
+color:yellow;
+margin:20px;
+}
+
+#calledNumbers{
+background:#222;
+padding:10px;
+margin:10px;
+border-radius:10px;
+min-height:80px;
+word-wrap:break-word;
+}
 
 #cartelas{
-
 display:grid;
 grid-template-columns:repeat(4,1fr);
 gap:20px;
 padding:20px;
-
 }
 
-
 .cartela{
-
 background:#222;
 padding:10px;
 border:2px solid gray;
 border-radius:10px;
-
+cursor:pointer;
 }
 
+.cartela:hover{
+border:2px solid yellow;
+}
 
 table{
-
 margin:auto;
 border-collapse:collapse;
-
 }
 
-
 td,th{
-
 width:35px;
 height:35px;
 text-align:center;
 border:1px solid white;
-
 }
-
 
 th{
-
 background:red;
-
 }
 
-
-#last{
-
-font-size:45px;
-color:yellow;
-
+.marked{
+background:green;
+color:white;
+font-weight:bold;
 }
 
+.free{
+background:blue;
+color:white;
+font-weight:bold;
+}
+
+#mycard{
+margin-top:20px;
+padding-bottom:40px;
+}
+
+button{
+padding:12px 20px;
+font-size:18px;
+cursor:pointer;
+margin:10px;
+}
 
 </style>
 
-
 </head>
-
 
 <body>
 
-
 <h1>🎯 ETHIO BINGO</h1>
 
+<h2 id="countdown">Waiting...</h2>
 
-<h2 id="countdown"></h2>
+<button id="enableSound">
+🔊 ENABLE SOUND
+</button>
 
-
-<h2>Called Number</h2>
+<h2>Current Called Number</h2>
 
 <div id="last">-</div>
 
+<h2>All Called Numbers</h2>
 
+<div id="calledNumbers"></div>
 
 <h2>600 Cartelas</h2>
 
-
 <div id="cartelas"></div>
-
-
 
 <h2>Your Selected Cartela</h2>
 
-
 <div id="mycard"></div>
-
-
 
 </body>
 
