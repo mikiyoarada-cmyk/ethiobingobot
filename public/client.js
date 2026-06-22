@@ -1,15 +1,19 @@
 const socket = io();
 
-const cartelas = document.getElementById("cartelas");
-const mycard = document.getElementById("mycard");
-const last = document.getElementById("last");
-const countdown = document.getElementById("countdown");
-const calledBox = document.getElementById("calledNumbers");
 
-let selectedCards = [];
-let called = [];
+const cartelas=document.getElementById("cartelas");
+const mycard=document.getElementById("mycard");
+const last=document.getElementById("last");
+const countdown=document.getElementById("countdown");
+const calledBox=document.getElementById("calledNumbers");
 
-let voiceReady = false;
+
+let selectedCards=[];
+let called=[];
+
+
+let voiceReady=false;
+
 
 
 // SOUND BUTTON
@@ -21,47 +25,46 @@ soundButton.onclick=()=>{
 
 voiceReady=true;
 
-soundButton.innerHTML="✅ SOUND ENABLED";
+soundButton.innerHTML="✅ SOUND ON";
 
 
 let test=new Audio("/voices/B1.mp3");
 
-test.volume=0.5;
+test.volume=0.2;
 
-test.play()
-.catch(e=>console.log(e));
+test.play().catch(e=>console.log(e));
+
 
 };
 
 
 
 
-// GET VOICE NAME
 
 function getVoiceFile(number){
 
 
-if(number>=1 && number<=15)
+if(number<=15)
 return "B"+number+".mp3";
 
 
-if(number>=16 && number<=30)
+if(number<=30)
 return "I"+number+".mp3";
 
 
-if(number>=31 && number<=45)
+if(number<=45)
 return "N"+number+".mp3";
 
 
-if(number>=46 && number<=60)
+if(number<=60)
 return "G"+number+".mp3";
 
 
-if(number>=61 && number<=75)
 return "O"+number+".mp3";
 
 
 }
+
 
 
 
@@ -81,7 +84,7 @@ audio.volume=1;
 
 
 audio.play()
-.catch(err=>console.log(err));
+.catch(e=>console.log(e));
 
 
 }
@@ -116,6 +119,7 @@ for(let r=0;r<5;r++){
 html+="<tr>";
 
 
+
 for(let c=0;c<5;c++){
 
 
@@ -125,15 +129,16 @@ let number=card.numbers[r*5+c];
 let mark="";
 
 
-if(number==="FREE"){
+if(called.includes(number)){
 
-mark="free";
+mark="marked";
 
 }
 
-else if(called.includes(number)){
 
-mark="marked";
+if(number==="FREE"){
+
+mark="free";
 
 }
 
@@ -151,7 +156,9 @@ ${number}
 }
 
 
+
 html+="</tr>";
+
 
 }
 
@@ -160,12 +167,11 @@ html+="</tr>";
 html+="</table>";
 
 
+
 element.innerHTML=html;
 
 
 }
-
-
 
 
 
@@ -188,6 +194,7 @@ box.className="cartela";
 
 
 box.innerHTML=
+
 "<h3>Cartela "+card.id+"</h3>";
 
 
@@ -198,7 +205,9 @@ let area=document.createElement("div");
 drawCard(card,area);
 
 
+
 box.appendChild(area);
+
 
 
 
@@ -206,10 +215,13 @@ box.appendChild(area);
 box.onclick=()=>{
 
 
-if(!selectedCards.includes(card.id)){
+if(selectedCards.find(c=>c.id===card.id))
+return;
 
 
-selectedCards.push(card.id);
+
+selectedCards.push(card);
+
 
 
 socket.emit("chooseCard",{
@@ -219,11 +231,13 @@ cardId:card.id
 });
 
 
-}
+
+showMyCards();
 
 
 
 };
+
 
 
 
@@ -234,8 +248,8 @@ cartelas.appendChild(box);
 });
 
 
-
 });
+
 
 
 
@@ -248,7 +262,9 @@ socket.on("cardSelected",(card)=>{
 
 if(!selectedCards.find(c=>c.id===card.id)){
 
+
 selectedCards.push(card);
+
 
 }
 
@@ -257,6 +273,7 @@ showMyCards();
 
 
 });
+
 
 
 
@@ -276,8 +293,7 @@ selectedCards.forEach(card=>{
 let title=document.createElement("h2");
 
 
-title.innerHTML=
-"SELECTED CARTELA "+card.id;
+title.innerHTML="SELECTED CARTELA "+card.id;
 
 
 
@@ -288,7 +304,9 @@ mycard.appendChild(title);
 let area=document.createElement("div");
 
 
+
 drawCard(card,area);
+
 
 
 mycard.appendChild(area);
@@ -312,7 +330,9 @@ socket.on("number",(data)=>{
 called=data.called;
 
 
+
 last.innerHTML=data.number;
+
 
 
 calledBox.innerHTML=
@@ -335,10 +355,11 @@ showMyCards();
 
 
 
+
 socket.on("calledNumbers",(data)=>{
 
 
-called=data.called;
+called=data.called||[];
 
 
 calledBox.innerHTML=
@@ -354,14 +375,16 @@ called.join(" , ");
 
 
 
+
 socket.on("countdown",(data)=>{
 
 
 countdown.innerHTML=
-"Game starts in: "+data.countdown+" seconds";
+"Game starts in "+data.countdown+" seconds";
 
 
 });
+
 
 
 
@@ -381,10 +404,8 @@ last.innerHTML="-";
 calledBox.innerHTML="";
 
 
-showMyCards();
-
-
 });
+
 
 
 
@@ -396,21 +417,17 @@ socket.on("winner",(data)=>{
 
 
 alert(
-"🎉 GOOD BINGO!\nCartela Number: "+data.cartela
+"🎉 GOOD BINGO!\nWinner Cartela: "+data.cartela
 );
 
 
-document.body.innerHTML+=`
+document.getElementById("winner")
+.innerHTML=
+"🎉 GOOD BINGO! Winner Cartela "+data.cartela;
 
-<h1 style="color:yellow">
-🎉 GOOD BINGO!
-<br>
-WINNER CARTELA ${data.cartela}
-</h1>
-
-`;
 
 });
+
 
 
 
@@ -420,25 +437,9 @@ WINNER CARTELA ${data.cartela}
 socket.on("gameEnd",()=>{
 
 
-document.body.innerHTML+=`
-
-<h1 style="color:lime">
-GAME END
-<br>
-NEW GAME STARTING SOON
-</h1>
-
-`;
-
-
-});
-
-
-
-socket.on("newGame",()=>{
-
-
-location.reload();
+document.getElementById("winner")
+.innerHTML=
+"Game ended";
 
 
 });

@@ -12,29 +12,28 @@
 <style>
 
 body{
+
 background:#111;
 color:white;
 font-family:Arial;
 text-align:center;
-margin:0;
-}
 
-
-h1{
-color:gold;
 }
 
 
 #countdown{
-color:yellow;
+
 font-size:30px;
+color:yellow;
+
 }
 
 
 #last{
+
 font-size:55px;
-color:red;
-font-weight:bold;
+color:yellow;
+
 }
 
 
@@ -42,7 +41,7 @@ font-weight:bold;
 
 background:#222;
 padding:15px;
-margin:15px;
+margin:10px;
 border-radius:10px;
 font-size:20px;
 
@@ -54,8 +53,8 @@ font-size:20px;
 
 display:grid;
 grid-template-columns:repeat(4,1fr);
-gap:15px;
-padding:15px;
+gap:20px;
+padding:20px;
 
 }
 
@@ -64,12 +63,12 @@ padding:15px;
 .cartela{
 
 background:#222;
+padding:10px;
 border:2px solid gray;
 border-radius:10px;
-padding:10px;
-cursor:pointer;
 
 }
+
 
 
 .cartela:hover{
@@ -130,22 +129,21 @@ font-weight:bold;
 
 button{
 
+padding:12px;
 font-size:18px;
-padding:12px 20px;
-background:green;
-color:white;
-border:none;
-border-radius:8px;
+margin:10px;
 
 }
 
 
 
-#mycard{
+#winner{
 
-margin:30px;
+font-size:30px;
+color:lime;
 
 }
+
 
 
 </style>
@@ -153,20 +151,30 @@ margin:30px;
 </head>
 
 
+
 <body>
+
 
 
 <h1>🎯 ETHIO BINGO</h1>
 
 
+
 <h2 id="countdown">
+
 Waiting...
+
 </h2>
 
 
+
+
 <button id="enableSound">
+
 🔊 ENABLE SOUND
+
 </button>
+
 
 
 
@@ -174,8 +182,11 @@ Waiting...
 
 
 <div id="last">
+
 -
+
 </div>
+
 
 
 
@@ -183,15 +194,23 @@ Waiting...
 
 
 <div id="calledNumbers">
-None
+
 </div>
 
 
 
-<h2>600 CARTELAS</h2>
+
+<h2 id="winner"></h2>
+
+
+
+
+<h2>600 Cartelas</h2>
 
 
 <div id="cartelas"></div>
+
+
 
 
 
@@ -202,6 +221,8 @@ None
 
 
 
+
 </body>
+
 
 </html>
