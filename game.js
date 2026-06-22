@@ -6,27 +6,29 @@ let cards = [];
 let calledNumbers = [];
 let pool = [];
 
-let selectedCards = {};
+let playersCards = {};
 let takenCards = {};
 
-let timer = 30;
-let countInterval;
-let gameInterval;
-
 let gameStarted = false;
+let countdownRunning = false;
+
+let countTimer;
+let gameTimer;
 
 
 
-function randomNumbers(min,max,count){
+function randomNumbers(min,max,total){
 
 let arr=[];
 
-while(arr.length<count){
+while(arr.length<total){
 
 let n=Math.floor(Math.random()*(max-min+1))+min;
 
 if(!arr.includes(n)){
+
 arr.push(n);
+
 }
 
 }
@@ -34,6 +36,7 @@ arr.push(n);
 return arr;
 
 }
+
 
 
 
@@ -64,12 +67,14 @@ numbers.push(O[i]);
 
 
 return {
-id,
-numbers
+
+id:id,
+numbers:numbers
+
 };
 
-
 }
+
 
 
 
@@ -88,96 +93,33 @@ cards.push(createCard(i));
 
 
 
-function checkBingo(card){
+function startCountdown(){
+
+if(countdownRunning)return;
 
 
-let n=card.numbers.map(x=>{
+countdownRunning=true;
 
-if(x==="FREE") return true;
 
-return calledNumbers.includes(x);
+let t=30;
 
+
+countTimer=setInterval(()=>{
+
+
+io.emit("countdown",{
+countdown:t
 });
 
 
-
-// rows
-
-for(let r=0;r<5;r++){
-
-let ok=true;
-
-for(let c=0;c<5;c++){
-
-if(!n[r*5+c]) ok=false;
-
-}
-
-if(ok)return true;
-
-}
+t--;
 
 
+if(t<0){
 
-// columns
+clearInterval(countTimer);
 
-for(let c=0;c<5;c++){
-
-let ok=true;
-
-for(let r=0;r<5;r++){
-
-if(!n[r*5+c]) ok=false;
-
-}
-
-if(ok)return true;
-
-}
-
-
-
-// diagonal
-
-let a=true;
-
-let b=true;
-
-
-for(let i=0;i<5;i++){
-
-if(!n[i*5+i])a=false;
-
-if(!n[i*5+(4-i)])b=false;
-
-}
-
-
-return a||b;
-
-}
-
-
-
-
-function startCountdown(){
-
-
-timer=30;
-
-
-countInterval=setInterval(()=>{
-
-
-io.emit("countdown",{countdown:timer});
-
-
-timer--;
-
-
-if(timer<0){
-
-clearInterval(countInterval);
+countdownRunning=false;
 
 startGame();
 
@@ -193,10 +135,115 @@ startGame();
 
 
 
+
+function checkWinner(card){
+
+
+let mark=[];
+
+
+card.numbers.forEach((n)=>{
+
+
+if(n==="FREE"){
+
+mark.push(true);
+
+}
+
+else{
+
+mark.push(
+calledNumbers.includes(n)
+);
+
+}
+
+
+});
+
+
+
+// rows
+
+for(let r=0;r<5;r++){
+
+let win=true;
+
+for(let c=0;c<5;c++){
+
+if(!mark[r*5+c])
+win=false;
+
+}
+
+if(win)return true;
+
+}
+
+
+
+// columns
+
+for(let c=0;c<5;c++){
+
+let win=true;
+
+for(let r=0;r<5;r++){
+
+if(!mark[r*5+c])
+win=false;
+
+}
+
+if(win)return true;
+
+}
+
+
+
+// diagonal
+
+let a=true;
+
+let b=true;
+
+
+for(let i=0;i<5;i++){
+
+if(!mark[i*5+i])
+a=false;
+
+
+if(!mark[i*5+(4-i)])
+b=false;
+
+}
+
+
+return a||b;
+
+
+}
+
+
+
+
+
 function startGame(){
 
 
+if(Object.keys(takenCards).length<2){
+
+return;
+
+}
+
+
 gameStarted=true;
+
+
+calledNumbers=[];
 
 
 pool=[];
@@ -209,13 +256,12 @@ pool.push(i);
 }
 
 
-calledNumbers=[];
-
 
 io.emit("gameStart");
 
 
-gameInterval=setInterval(()=>{
+
+gameTimer=setInterval(()=>{
 
 
 if(pool.length===0){
@@ -227,7 +273,9 @@ return;
 }
 
 
-let index=Math.floor(Math.random()*pool.length);
+let index=Math.floor(
+Math.random()*pool.length
+);
 
 
 let number=pool.splice(index,1)[0];
@@ -239,7 +287,7 @@ calledNumbers.push(number);
 
 io.emit("number",{
 
-number,
+number:number,
 
 called:calledNumbers
 
@@ -247,13 +295,18 @@ called:calledNumbers
 
 
 
-for(let id in selectedCards){
+
+// check only selected cards
+
+for(let id in takenCards){
 
 
-let card=cards.find(c=>c.id==id);
+let card=cards.find(
+c=>c.id==id
+);
 
 
-if(checkBingo(card)){
+if(checkWinner(card)){
 
 
 io.emit("winner",{
@@ -284,10 +337,12 @@ return;
 
 
 
+
+
 function endGame(){
 
 
-clearInterval(gameInterval);
+clearInterval(gameTimer);
 
 
 gameStarted=false;
@@ -299,7 +354,7 @@ io.emit("gameEnd");
 setTimeout(()=>{
 
 
-selectedCards={};
+playersCards={};
 
 takenCards={};
 
@@ -322,6 +377,9 @@ startCountdown();
 
 
 
+
+
+
 function init(server){
 
 
@@ -335,17 +393,10 @@ create600Cards();
 io.on("connection",(socket)=>{
 
 
-
-socket.emit("cardsList",cards);
-
-
-
-socket.emit("calledNumbers",{
-
-called:calledNumbers
-
-});
-
+socket.emit(
+"cardsList",
+cards
+);
 
 
 
@@ -358,7 +409,9 @@ let id=data.cardId;
 
 if(takenCards[id] && takenCards[id]!==socket.id){
 
-socket.emit("cardTaken");
+socket.emit(
+"cardTaken"
+);
 
 return;
 
@@ -369,28 +422,39 @@ return;
 takenCards[id]=socket.id;
 
 
-
-selectedCards[id]=true;
-
-
-
-let card=cards.find(c=>c.id==id);
+playersCards[socket.id] =
+playersCards[socket.id] || [];
 
 
+if(!playersCards[socket.id].includes(id)){
 
-socket.emit("cardSelected",card);
+playersCards[socket.id].push(id);
 
-
-
-let total=Object.keys(takenCards).length;
+}
 
 
 
-io.emit("pickedCount",total);
+let card=cards.find(
+c=>c.id==id
+);
 
 
 
-if(total>=2 && !gameStarted && !countInterval){
+socket.emit(
+"cardSelected",
+card
+);
+
+
+
+io.emit(
+"pickedCount",
+Object.keys(takenCards).length
+);
+
+
+
+if(Object.keys(takenCards).length>=2){
 
 startCountdown();
 
@@ -402,8 +466,10 @@ startCountdown();
 
 
 
-socket.on("disconnect",()=>{
 
+
+
+socket.on("disconnect",()=>{
 
 
 for(let id in takenCards){
@@ -412,12 +478,9 @@ if(takenCards[id]===socket.id){
 
 delete takenCards[id];
 
-delete selectedCards[id];
-
 }
 
 }
-
 
 
 });
@@ -426,9 +489,6 @@ delete selectedCards[id];
 
 });
 
-
-
-startCountdown();
 
 
 }
