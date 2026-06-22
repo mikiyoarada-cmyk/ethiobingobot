@@ -4,90 +4,64 @@ const cartelas = document.getElementById("cartelas");
 const mycard = document.getElementById("mycard");
 const last = document.getElementById("last");
 const countdown = document.getElementById("countdown");
+const calledBox = document.getElementById("calledNumbers");
 
-let selectedCard = null;
+let selectedCards = [];
 let called = [];
 
 let voiceReady = false;
 
 
-// ENABLE VOICE BUTTON
-let soundButton = document.createElement("button");
+// SOUND BUTTON
 
-soundButton.innerHTML = "🔊 ENABLE VOICE";
-
-soundButton.style.position="fixed";
-soundButton.style.top="10px";
-soundButton.style.right="10px";
-soundButton.style.zIndex="9999";
-
-document.body.appendChild(soundButton);
+const soundButton=document.getElementById("enableSound");
 
 
-
-soundButton.onclick=function(){
+soundButton.onclick=()=>{
 
 voiceReady=true;
 
-soundButton.innerHTML="✅ VOICE ON";
+soundButton.innerHTML="✅ SOUND ENABLED";
+
 
 let test=new Audio("/voices/B1.mp3");
 
-test.volume=0.01;
+test.volume=0.5;
 
 test.play()
 .catch(e=>console.log(e));
-
 
 };
 
 
 
 
-
-// GET BINGO VOICE NAME
+// GET VOICE NAME
 
 function getVoiceFile(number){
 
 
-if(number>=1 && number<=15){
-
+if(number>=1 && number<=15)
 return "B"+number+".mp3";
 
-}
 
-
-if(number>=16 && number<=30){
-
+if(number>=16 && number<=30)
 return "I"+number+".mp3";
 
-}
 
-
-if(number>=31 && number<=45){
-
+if(number>=31 && number<=45)
 return "N"+number+".mp3";
 
-}
 
-
-if(number>=46 && number<=60){
-
+if(number>=46 && number<=60)
 return "G"+number+".mp3";
 
-}
 
-
-if(number>=61 && number<=75){
-
+if(number>=61 && number<=75)
 return "O"+number+".mp3";
 
-}
-
 
 }
-
-
 
 
 
@@ -95,18 +69,11 @@ return "O"+number+".mp3";
 function playVoice(number){
 
 
-if(!voiceReady){
-
-return;
-
-}
-
-
-let file=getVoiceFile(number);
+if(!voiceReady)return;
 
 
 let audio=new Audio(
-"/voices/"+file
+"/voices/"+getVoiceFile(number)
 );
 
 
@@ -114,21 +81,10 @@ audio.volume=1;
 
 
 audio.play()
-.then(()=>{
-
-console.log("Playing",file);
-
-})
-.catch(err=>{
-
-console.log("voice error",err);
-
-});
+.catch(err=>console.log(err));
 
 
 }
-
-
 
 
 
@@ -154,25 +110,30 @@ let html=`
 
 
 
-for(let i=0;i<25;i+=5){
+for(let r=0;r<5;r++){
 
 
 html+="<tr>";
 
 
-
-for(let j=0;j<5;j++){
-
-
-let number=card.numbers[i+j];
+for(let c=0;c<5;c++){
 
 
-let style="";
+let number=card.numbers[r*5+c];
 
 
-if(called.includes(number)){
+let mark="";
 
-style="background:green;color:white;font-weight:bold;";
+
+if(number==="FREE"){
+
+mark="free";
+
+}
+
+else if(called.includes(number)){
+
+mark="marked";
 
 }
 
@@ -180,11 +141,12 @@ style="background:green;color:white;font-weight:bold;";
 
 html+=`
 
-<td style="${style}">
+<td class="${mark}">
 ${number}
 </td>
 
 `;
+
 
 }
 
@@ -209,6 +171,7 @@ element.innerHTML=html;
 
 
 
+
 socket.on("cardsList",(cards)=>{
 
 
@@ -220,6 +183,7 @@ cards.forEach(card=>{
 
 let box=document.createElement("div");
 
+
 box.className="cartela";
 
 
@@ -230,6 +194,7 @@ box.innerHTML=
 
 let area=document.createElement("div");
 
+
 drawCard(card,area);
 
 
@@ -237,10 +202,14 @@ box.appendChild(area);
 
 
 
+
 box.onclick=()=>{
 
 
-selectedCard=card;
+if(!selectedCards.includes(card.id)){
+
+
+selectedCards.push(card.id);
 
 
 socket.emit("chooseCard",{
@@ -250,7 +219,8 @@ cardId:card.id
 });
 
 
-showMyCard();
+}
+
 
 
 };
@@ -260,11 +230,12 @@ showMyCard();
 cartelas.appendChild(box);
 
 
-});
-
 
 });
 
+
+
+});
 
 
 
@@ -275,10 +246,14 @@ cartelas.appendChild(box);
 socket.on("cardSelected",(card)=>{
 
 
-selectedCard=card;
+if(!selectedCards.find(c=>c.id===card.id)){
+
+selectedCards.push(card);
+
+}
 
 
-showMyCard();
+showMyCards();
 
 
 });
@@ -289,19 +264,21 @@ showMyCard();
 
 
 
-function showMyCard(){
-
-
-if(!selectedCard)return;
+function showMyCards(){
 
 
 mycard.innerHTML="";
 
 
+selectedCards.forEach(card=>{
+
+
 let title=document.createElement("h2");
 
+
 title.innerHTML=
-"SELECTED CARTELA "+selectedCard.id;
+"SELECTED CARTELA "+card.id;
+
 
 
 mycard.appendChild(title);
@@ -311,10 +288,14 @@ mycard.appendChild(title);
 let area=document.createElement("div");
 
 
-drawCard(selectedCard,area);
+drawCard(card,area);
 
 
 mycard.appendChild(area);
+
+
+
+});
 
 
 }
@@ -325,29 +306,62 @@ mycard.appendChild(area);
 
 
 
-
 socket.on("number",(data)=>{
 
 
-called.push(data.number);
+called=data.called;
 
 
 last.innerHTML=data.number;
 
 
-// mark selected cartela
+calledBox.innerHTML=
+called.join(" , ");
 
-showMyCard();
 
-
-// play matching BINGO voice
 
 playVoice(data.number);
 
 
 
+showMyCards();
+
+
+
 });
 
+
+
+
+
+
+socket.on("calledNumbers",(data)=>{
+
+
+called=data.called;
+
+
+calledBox.innerHTML=
+called.join(" , ");
+
+
+
+});
+
+
+
+
+
+
+
+socket.on("countdown",(data)=>{
+
+
+countdown.innerHTML=
+"Game starts in: "+data.countdown+" seconds";
+
+
+});
 
 
 
@@ -361,7 +375,70 @@ socket.on("gameStart",()=>{
 called=[];
 
 
-showMyCard();
+last.innerHTML="-";
+
+
+calledBox.innerHTML="";
+
+
+showMyCards();
+
+
+});
+
+
+
+
+
+
+
+socket.on("winner",(data)=>{
+
+
+alert(
+"🎉 GOOD BINGO!\nCartela Number: "+data.cartela
+);
+
+
+document.body.innerHTML+=`
+
+<h1 style="color:yellow">
+🎉 GOOD BINGO!
+<br>
+WINNER CARTELA ${data.cartela}
+</h1>
+
+`;
+
+});
+
+
+
+
+
+
+socket.on("gameEnd",()=>{
+
+
+document.body.innerHTML+=`
+
+<h1 style="color:lime">
+GAME END
+<br>
+NEW GAME STARTING SOON
+</h1>
+
+`;
+
+
+});
+
+
+
+socket.on("newGame",()=>{
+
+
+location.reload();
 
 
 });
