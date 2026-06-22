@@ -8,78 +8,123 @@ const countdown = document.getElementById("countdown");
 let selectedCard = null;
 let called = [];
 
-let audioContext;
-let soundEnabled = false;
+let voiceReady = false;
 
 
-// ENABLE SOUND BUTTON
-const soundBtn = document.createElement("button");
+// ENABLE VOICE BUTTON
+let soundButton = document.createElement("button");
 
-soundBtn.innerHTML = "🔊 ENABLE VOICE";
+soundButton.innerHTML = "🔊 ENABLE VOICE";
 
-soundBtn.style.position = "fixed";
-soundBtn.style.top = "10px";
-soundBtn.style.right = "10px";
-soundBtn.style.zIndex = "9999";
+soundButton.style.position="fixed";
+soundButton.style.top="10px";
+soundButton.style.right="10px";
+soundButton.style.zIndex="9999";
 
-document.body.appendChild(soundBtn);
-
-
-
-soundBtn.onclick = async () => {
-
-    try {
-
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
-        await audioContext.resume();
-
-        soundEnabled = true;
-
-        soundBtn.innerHTML = "✅ VOICE ON";
-
-        soundBtn.style.background = "green";
+document.body.appendChild(soundButton);
 
 
-    } catch(e){
 
-        console.log(e);
+soundButton.onclick=function(){
 
-    }
+voiceReady=true;
+
+soundButton.innerHTML="✅ VOICE ON";
+
+let test=new Audio("/voices/B1.mp3");
+
+test.volume=0.01;
+
+test.play()
+.catch(e=>console.log(e));
+
 
 };
 
 
 
 
-// PLAY MP3 VOICE
+
+// GET BINGO VOICE NAME
+
+function getVoiceFile(number){
+
+
+if(number>=1 && number<=15){
+
+return "B"+number+".mp3";
+
+}
+
+
+if(number>=16 && number<=30){
+
+return "I"+number+".mp3";
+
+}
+
+
+if(number>=31 && number<=45){
+
+return "N"+number+".mp3";
+
+}
+
+
+if(number>=46 && number<=60){
+
+return "G"+number+".mp3";
+
+}
+
+
+if(number>=61 && number<=75){
+
+return "O"+number+".mp3";
+
+}
+
+
+}
+
+
+
+
+
+
 function playVoice(number){
 
-    if(!soundEnabled){
-        return;
-    }
+
+if(!voiceReady){
+
+return;
+
+}
 
 
-    let audio = new Audio();
-
-    audio.src = "/voices/" + number + ".mp3";
-
-    audio.preload = "auto";
-
-    audio.volume = 1;
+let file=getVoiceFile(number);
 
 
-    audio.play()
-    .then(()=>{
+let audio=new Audio(
+"/voices/"+file
+);
 
-        console.log("VOICE PLAY:",number);
 
-    })
-    .catch(err=>{
+audio.volume=1;
 
-        console.log("VOICE ERROR:",err);
 
-    });
+audio.play()
+.then(()=>{
+
+console.log("Playing",file);
+
+})
+.catch(err=>{
+
+console.log("voice error",err);
+
+});
+
 
 }
 
@@ -89,10 +134,11 @@ function playVoice(number){
 
 
 
-function drawCard(card, element){
+
+function drawCard(card,element){
 
 
-let html = `
+let html=`
 
 <table>
 
@@ -111,27 +157,28 @@ let html = `
 for(let i=0;i<25;i+=5){
 
 
-html += "<tr>";
+html+="<tr>";
 
 
 
 for(let j=0;j<5;j++){
 
 
-let number = card.numbers[i+j];
+let number=card.numbers[i+j];
+
 
 let style="";
 
 
 if(called.includes(number)){
 
-style="background:green;color:white";
+style="background:green;color:white;font-weight:bold;";
 
 }
 
 
 
-html += `
+html+=`
 
 <td style="${style}">
 ${number}
@@ -139,23 +186,22 @@ ${number}
 
 `;
 
+}
 
+
+html+="</tr>";
 
 }
 
 
-html += "</tr>";
 
-}
+html+="</table>";
 
 
-html += "</table>";
-
-element.innerHTML = html;
+element.innerHTML=html;
 
 
 }
-
 
 
 
@@ -177,13 +223,12 @@ let box=document.createElement("div");
 box.className="cartela";
 
 
-box.innerHTML =
+box.innerHTML=
 "<h3>Cartela "+card.id+"</h3>";
 
 
 
 let area=document.createElement("div");
-
 
 drawCard(card,area);
 
@@ -200,8 +245,6 @@ selectedCard=card;
 
 socket.emit("chooseCard",{
 
-userId:Math.floor(Math.random()*999999),
-
 cardId:card.id
 
 });
@@ -215,7 +258,6 @@ showMyCard();
 
 
 cartelas.appendChild(box);
-
 
 
 });
@@ -258,8 +300,8 @@ mycard.innerHTML="";
 
 let title=document.createElement("h2");
 
-
-title.innerHTML="YOUR SELECTED CARTELA";
+title.innerHTML=
+"SELECTED CARTELA "+selectedCard.id;
 
 
 mycard.appendChild(title);
@@ -283,6 +325,7 @@ mycard.appendChild(area);
 
 
 
+
 socket.on("number",(data)=>{
 
 
@@ -292,20 +335,19 @@ called.push(data.number);
 last.innerHTML=data.number;
 
 
-
-// mark only selected cartela
+// mark selected cartela
 
 showMyCard();
 
 
-
-// voice
+// play matching BINGO voice
 
 playVoice(data.number);
 
 
 
 });
+
 
 
 
