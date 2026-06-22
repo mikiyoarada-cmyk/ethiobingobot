@@ -502,17 +502,43 @@ countdown.innerHTML="GAME END";
 socket.on("winner",(data)=>{
 
 
-let text="🎉 GOOD BINGO 🎉<br>";
+let winnerCard = selectedCards.find(
+c=>c.id==data.cartela
+);
 
 
-text += "Cartela Number: "+data.cartela;
+
+mycard.innerHTML="";
 
 
 
-mycard.innerHTML=
+let title=document.createElement("h1");
 
-"<h1>"+text+"</h1>";
 
+title.innerHTML=
+"🎉 GOOD BINGO 🎉<br>WINNER CARTELA "+data.cartela;
+
+
+
+mycard.appendChild(title);
+
+
+
+
+
+if(winnerCard){
+
+
+let area=document.createElement("div");
+
+
+drawCard(winnerCard,area);
+
+
+mycard.appendChild(area);
+
+
+}
 
 
 });
