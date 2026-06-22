@@ -21,15 +21,14 @@ let timer = 30;
 
 
 
-
 function randomNumbers(min,max){
 
 let arr=[];
 
 
-while(arr.length<5){
+while(arr.length < 5){
 
-let n=Math.floor(Math.random()*(max-min+1))+min;
+let n = Math.floor(Math.random()*(max-min+1))+min;
 
 
 if(!arr.includes(n)){
@@ -109,6 +108,7 @@ numbers:numbers
 
 
 
+
 function create600Cards(){
 
 
@@ -142,7 +142,6 @@ return true;
 }
 
 
-
 return calledNumbers.includes(number);
 
 
@@ -160,7 +159,6 @@ for(let r=0;r<5;r++){
 board[r]=[];
 
 
-
 for(let c=0;c<5;c++){
 
 
@@ -175,8 +173,7 @@ board[r][c]=card.numbers[r*5+c];
 
 
 
-
-// ROW
+// ROWS
 
 for(let r=0;r<5;r++){
 
@@ -213,7 +210,7 @@ return true;
 
 
 
-// COLUMN
+// COLUMNS
 
 for(let c=0;c<5;c++){
 
@@ -271,12 +268,12 @@ win=false;
 }
 
 
-
 if(win){
 
 return true;
 
 }
+
 
 
 
@@ -304,7 +301,6 @@ win=false;
 }
 
 
-
 if(win){
 
 return true;
@@ -325,8 +321,8 @@ return false;
 
 
 
-function startCountdown(){
 
+function startCountdown(){
 
 
 if(countInterval){
@@ -348,6 +344,7 @@ io.emit("clearGame");
 countInterval=setInterval(()=>{
 
 
+
 io.emit("countdown",{
 
 countdown:timer
@@ -363,12 +360,21 @@ timer--;
 if(timer<0){
 
 
+
 clearInterval(countInterval);
 
 countInterval=null;
 
 
+
+if(Object.keys(pickedCards).length>=2){
+
+
 startGame();
+
+
+}
+
 
 
 }
@@ -399,8 +405,8 @@ gameStarted=true;
 calledNumbers=[];
 
 
-pool=[];
 
+pool=[];
 
 
 for(let i=1;i<=75;i++){
@@ -414,7 +420,6 @@ pool.push(i);
 
 
 io.emit("gameStart");
-
 
 
 
@@ -432,7 +437,6 @@ return;
 
 
 }
-
 
 
 
@@ -471,6 +475,7 @@ called:calledNumbers
 for(let id in pickedCards){
 
 
+
 let card=cards.find(
 
 c=>c.id==id
@@ -485,11 +490,9 @@ if(card && checkWinner(card)){
 
 io.emit("winner",{
 
-
 message:"GOOD BINGO",
 
 cartela:card.id
-
 
 });
 
@@ -525,6 +528,7 @@ return;
 function endGame(){
 
 
+
 if(gameInterval){
 
 clearInterval(gameInterval);
@@ -532,17 +536,8 @@ clearInterval(gameInterval);
 }
 
 
-if(countInterval){
-
-clearInterval(countInterval);
-
-}
-
-
 
 gameInterval=null;
-
-countInterval=null;
 
 
 
@@ -558,16 +553,15 @@ setTimeout(()=>{
 
 
 
-// clear all old game
+// RESET EVERYTHING
 
 calledNumbers=[];
 
 
+pool=[];
+
+
 pickedCards={};
-
-
-
-create600Cards();
 
 
 
@@ -575,13 +569,23 @@ io.emit("clearGame");
 
 
 
+create600Cards();
+
+
+
 io.emit("cardsList",cards);
 
 
 
-// new game countdown
+// start waiting countdown only after 2 cards
+
+if(Object.keys(pickedCards).length>=2){
+
 
 startCountdown();
+
+
+}
 
 
 
@@ -593,12 +597,11 @@ startCountdown();
 function init(server){
 
 
-io=new Server(server);
+io = new Server(server);
 
 
 
 create600Cards();
-
 
 
 
@@ -620,13 +623,14 @@ called:calledNumbers
 
 
 
+
+
 socket.on("chooseCard",(data)=>{
 
 
 
-// block picking during game
-
 if(gameStarted){
+
 
 
 socket.emit("cardTaken",{
@@ -636,10 +640,13 @@ message:"WAITING FOR NEXT GAME"
 });
 
 
+
 return;
 
 
+
 }
+
 
 
 
@@ -663,12 +670,11 @@ return;
 
 
 
-// stop duplicate cartela
-
 if(
 pickedCards[data.cardId] &&
 pickedCards[data.cardId]!==socket.id
 ){
+
 
 
 socket.emit("cardTaken",{
@@ -676,6 +682,7 @@ socket.emit("cardTaken",{
 message:"CARTELA ALREADY PICKED"
 
 });
+
 
 
 return;
@@ -695,16 +702,11 @@ socket.emit("cardSelected",card);
 
 
 
-
-
 io.emit("pickedCount",{
-
 
 count:Object.keys(pickedCards).length
 
-
 });
-
 
 
 
@@ -722,7 +724,6 @@ startCountdown();
 
 
 }
-
 
 
 
@@ -751,7 +752,6 @@ delete pickedCards[id];
 }
 
 
-
 }
 
 
@@ -768,7 +768,6 @@ delete pickedCards[id];
 
 
 }
-
 
 
 
