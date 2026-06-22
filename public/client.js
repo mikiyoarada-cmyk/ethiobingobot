@@ -8,97 +8,78 @@ const countdown = document.getElementById("countdown");
 let selectedCard = null;
 let called = [];
 
-let soundOn = false;
+let audioContext;
+let soundEnabled = false;
 
 
-// sound enable button
-let soundButton = document.createElement("button");
+// ENABLE SOUND BUTTON
+const soundBtn = document.createElement("button");
 
-soundButton.innerHTML = "🔊 ENABLE SOUND";
+soundBtn.innerHTML = "🔊 ENABLE VOICE";
 
-soundButton.style.position="fixed";
-soundButton.style.top="10px";
-soundButton.style.right="10px";
-soundButton.style.zIndex="99999";
+soundBtn.style.position = "fixed";
+soundBtn.style.top = "10px";
+soundBtn.style.right = "10px";
+soundBtn.style.zIndex = "9999";
 
-document.body.appendChild(soundButton);
-
-
-
-soundButton.onclick = async function(){
-
-try{
-
-let audio = new Audio("/voices/1.mp3");
-
-audio.volume=0.1;
-
-await audio.play();
-
-audio.pause();
-
-soundOn=true;
-
-soundButton.innerHTML="🔊 SOUND ENABLED";
-
-console.log("Sound enabled");
+document.body.appendChild(soundBtn);
 
 
-}catch(e){
 
-console.log("Sound error:",e);
+soundBtn.onclick = async () => {
 
-}
+    try {
 
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        await audioContext.resume();
+
+        soundEnabled = true;
+
+        soundBtn.innerHTML = "✅ VOICE ON";
+
+        soundBtn.style.background = "green";
+
+
+    } catch(e){
+
+        console.log(e);
+
+    }
 
 };
 
 
 
 
+// PLAY MP3 VOICE
+function playVoice(number){
+
+    if(!soundEnabled){
+        return;
+    }
 
 
-function playNumberVoice(number){
+    let audio = new Audio();
+
+    audio.src = "/voices/" + number + ".mp3";
+
+    audio.preload = "auto";
+
+    audio.volume = 1;
 
 
-if(!soundOn){
+    audio.play()
+    .then(()=>{
 
-console.log("Sound not enabled");
+        console.log("VOICE PLAY:",number);
 
-return;
+    })
+    .catch(err=>{
 
-}
+        console.log("VOICE ERROR:",err);
 
-
-
-let audio = new Audio();
-
-
-audio.src =
-window.location.origin +
-"/voices/" +
-number +
-".mp3";
-
-
-audio.volume=1;
-
-
-audio.load();
-
-
-audio.play()
-.then(()=>{
-
-console.log("Playing:",number);
-
-})
-.catch(err=>{
-
-console.log("Play failed:",err);
-
-});
-
+    });
 
 }
 
@@ -108,12 +89,10 @@ console.log("Play failed:",err);
 
 
 
+function drawCard(card, element){
 
 
-function drawCard(card,element){
-
-
-let html=`
+let html = `
 
 <table>
 
@@ -132,38 +111,30 @@ let html=`
 for(let i=0;i<25;i+=5){
 
 
-html+="<tr>";
+html += "<tr>";
 
 
 
 for(let j=0;j<5;j++){
 
 
-let n=card.numbers[i+j];
+let number = card.numbers[i+j];
+
+let style="";
 
 
-let cls="";
+if(called.includes(number)){
 
-
-if(called.includes(n)){
-
-cls="marked";
-
-}
-
-
-if(n==="FREE"){
-
-cls="free";
+style="background:green;color:white";
 
 }
 
 
 
-html+=`
+html += `
 
-<td class="${cls}">
-${n}
+<td style="${style}">
+${number}
 </td>
 
 `;
@@ -173,18 +144,17 @@ ${n}
 }
 
 
-html+="</tr>";
+html += "</tr>";
 
 }
 
 
-html+="</table>";
+html += "</table>";
 
-element.innerHTML=html;
+element.innerHTML = html;
 
 
 }
-
 
 
 
@@ -204,11 +174,10 @@ cards.forEach(card=>{
 
 let box=document.createElement("div");
 
-
 box.className="cartela";
 
 
-box.innerHTML=
+box.innerHTML =
 "<h3>Cartela "+card.id+"</h3>";
 
 
@@ -229,12 +198,13 @@ box.onclick=()=>{
 selectedCard=card;
 
 
-socket.emit(
-"chooseCard",
-{
+socket.emit("chooseCard",{
+
+userId:Math.floor(Math.random()*999999),
+
 cardId:card.id
-}
-);
+
+});
 
 
 showMyCard();
@@ -260,20 +230,16 @@ cartelas.appendChild(box);
 
 
 
-socket.on("selected",(data)=>{
+socket.on("cardSelected",(card)=>{
 
 
-selectedCard=data.card;
-
-
-called=data.called || [];
+selectedCard=card;
 
 
 showMyCard();
 
 
 });
-
 
 
 
@@ -290,13 +256,13 @@ if(!selectedCard)return;
 mycard.innerHTML="";
 
 
-let h=document.createElement("h2");
-
-h.innerHTML=
-"YOUR CARTELA "+selectedCard.id;
+let title=document.createElement("h2");
 
 
-mycard.appendChild(h);
+title.innerHTML="YOUR SELECTED CARTELA";
+
+
+mycard.appendChild(title);
 
 
 
@@ -317,29 +283,29 @@ mycard.appendChild(area);
 
 
 
-
 socket.on("number",(data)=>{
 
 
-called=data.called;
+called.push(data.number);
 
 
 last.innerHTML=data.number;
 
 
-// keep green marking
+
+// mark only selected cartela
 
 showMyCard();
 
 
-// play voice
 
-playNumberVoice(data.number);
+// voice
+
+playVoice(data.number);
 
 
 
 });
-
 
 
 
