@@ -3,27 +3,30 @@ const { Server } = require("socket.io");
 let io;
 
 let cards = [];
+
 let calledNumbers = [];
+
 let pool = [];
-
-let timer = 30;
-
-let countInterval;
-let gameInterval;
 
 let pickedCards = {};
 
 let gameStarted = false;
 
+let countInterval = null;
+
+let gameInterval = null;
+
+let timer = 30;
+
 
 
 function randomNumbers(min,max){
 
-let arr = [];
+let arr=[];
 
-while(arr.length < 5){
+while(arr.length<5){
 
-let n = Math.floor(Math.random()*(max-min+1))+min;
+let n=Math.floor(Math.random()*(max-min+1))+min;
 
 if(!arr.includes(n)){
 
@@ -44,31 +47,42 @@ return arr;
 function createCard(id){
 
 
-let B = randomNumbers(1,15);
-let I = randomNumbers(16,30);
-let N = randomNumbers(31,45);
-let G = randomNumbers(46,60);
-let O = randomNumbers(61,75);
+let B=randomNumbers(1,15);
+
+let I=randomNumbers(16,30);
+
+let N=randomNumbers(31,45);
+
+let G=randomNumbers(46,60);
+
+let O=randomNumbers(61,75);
 
 
 
-N[2] = "FREE";
+N[2]="FREE";
 
 
 
-let numbers = [];
+let numbers=[];
 
 
 
 for(let i=0;i<5;i++){
 
+
 numbers.push(B[i]);
+
 numbers.push(I[i]);
+
 numbers.push(N[i]);
+
 numbers.push(G[i]);
+
 numbers.push(O[i]);
 
+
 }
+
 
 
 
@@ -88,20 +102,31 @@ numbers:numbers
 
 
 
+
 function create600Cards(){
 
 
-cards = [];
+cards=[];
 
 
 for(let i=1;i<=600;i++){
 
+
 cards.push(createCard(i));
+
 
 }
 
 
-}function isMarked(number){
+}
+
+
+
+
+
+
+
+function isMarked(number){
 
 
 if(number==="FREE"){
@@ -114,15 +139,7 @@ return true;
 return calledNumbers.includes(number);
 
 
-}
-
-
-
-
-
-
-
-function checkWinner(card){
+}function checkWinner(card){
 
 
 let board=[];
@@ -149,7 +166,7 @@ board[r][c]=card.numbers[r*5+c];
 
 
 
-// ROWS
+// ROW CHECK
 
 for(let r=0;r<5;r++){
 
@@ -162,12 +179,52 @@ for(let c=0;c<5;c++){
 
 if(!isMarked(board[r][c])){
 
+
 win=false;
 
+
 }
 
 
 }
+
+
+
+if(win){
+
+return true;
+
+}
+
+
+}
+
+
+
+
+
+// COLUMN CHECK
+
+for(let c=0;c<5;c++){
+
+
+let win=true;
+
+
+for(let r=0;r<5;r++){
+
+
+if(!isMarked(board[r][c])){
+
+
+win=false;
+
+
+}
+
+
+}
+
 
 
 if(win){
@@ -184,43 +241,8 @@ return true;
 
 
 
-// COLUMNS
 
-for(let c=0;c<5;c++){
-
-
-let win=true;
-
-
-for(let r=0;r<5;r++){
-
-
-if(!isMarked(board[r][c])){
-
-win=false;
-
-}
-
-
-}
-
-
-if(win){
-
-return true;
-
-}
-
-
-}
-
-
-
-
-
-
-
-// DIAGONAL LEFT TO RIGHT
+// DIAGONAL 1
 
 let win=true;
 
@@ -252,7 +274,7 @@ return true;
 
 
 
-// DIAGONAL RIGHT TO LEFT
+// DIAGONAL 2
 
 win=true;
 
@@ -292,7 +314,17 @@ return false;
 
 
 
+
+
 function startCountdown(){
+
+
+if(countInterval){
+
+clearInterval(countInterval);
+
+}
+
 
 
 timer=30;
@@ -319,6 +351,8 @@ if(timer<0){
 
 clearInterval(countInterval);
 
+countInterval=null;
+
 
 startGame();
 
@@ -330,13 +364,14 @@ startGame();
 },1000);
 
 
-
 }function startGame(){
 
 
 if(Object.keys(pickedCards).length < 2){
 
+
 return;
+
 
 }
 
@@ -351,9 +386,12 @@ calledNumbers=[];
 pool=[];
 
 
+
 for(let i=1;i<=75;i++){
 
+
 pool.push(i);
+
 
 }
 
@@ -406,13 +444,16 @@ called:calledNumbers
 
 
 
-// WINNER CHECK
+// WINNER DETECTION
 
 for(let id in pickedCards){
 
 
+
 let card=cards.find(
+
 c=>c.id==id
+
 );
 
 
@@ -420,11 +461,15 @@ c=>c.id==id
 if(card && checkWinner(card)){
 
 
+
 io.emit("winner",{
+
 
 cartela:card.id
 
+
 });
+
 
 
 endGame();
@@ -436,6 +481,7 @@ return;
 }
 
 
+
 }
 
 
@@ -443,7 +489,9 @@ return;
 },3000);
 
 
+
 }
+
 
 
 
@@ -454,8 +502,25 @@ return;
 function endGame(){
 
 
+
+if(gameInterval){
+
 clearInterval(gameInterval);
 
+}
+
+
+if(countInterval){
+
+clearInterval(countInterval);
+
+}
+
+
+
+gameInterval=null;
+
+countInterval=null;
 
 
 gameStarted=false;
@@ -469,10 +534,12 @@ io.emit("gameEnd");
 setTimeout(()=>{
 
 
+
 calledNumbers=[];
 
 
 pickedCards={};
+
 
 
 create600Cards();
@@ -482,18 +549,12 @@ create600Cards();
 io.emit("clearGame");
 
 
+
 io.emit("cardsList",cards);
 
 
 
-startCountdown();
-
-
-
-},5000);
-
-
-}function init(server){
+startCountdown();function init(server){
 
 
 io = new Server(server);
@@ -501,6 +562,7 @@ io = new Server(server);
 
 
 create600Cards();
+
 
 
 
@@ -527,12 +589,10 @@ socket.on("chooseCard",(data)=>{
 
 
 
-let cardId=data.cardId;
-
-
-
 let card=cards.find(
-c=>c.id==cardId
+
+c=>c.id==data.cardId
+
 );
 
 
@@ -546,11 +606,9 @@ return;
 
 
 
+// stop another player taking same cartela
 
-
-// check if another player already owns it
-
-if(pickedCards[cardId] && pickedCards[cardId]!==socket.id){
+if(pickedCards[data.cardId] && pickedCards[data.cardId]!==socket.id){
 
 
 socket.emit("cardTaken");
@@ -564,8 +622,7 @@ return;
 
 
 
-
-pickedCards[cardId]=socket.id;
+pickedCards[data.cardId]=socket.id;
 
 
 
@@ -573,10 +630,11 @@ socket.emit("cardSelected",card);
 
 
 
-
 io.emit("pickedCount",{
 
+
 count:Object.keys(pickedCards).length
+
 
 });
 
@@ -584,9 +642,9 @@ count:Object.keys(pickedCards).length
 
 
 
-// start after 2 or more cartelas
+// only start when 2 or more cartelas selected
 
-if(Object.keys(pickedCards).length>=2 && !gameStarted){
+if(Object.keys(pickedCards).length>=2 && !gameStarted && !countInterval){
 
 
 startCountdown();
@@ -604,6 +662,7 @@ startCountdown();
 
 
 
+
 socket.on("disconnect",()=>{
 
 
@@ -611,7 +670,9 @@ socket.on("disconnect",()=>{
 for(let id in pickedCards){
 
 
+
 if(pickedCards[id]===socket.id){
+
 
 
 delete pickedCards[id];
@@ -630,6 +691,7 @@ delete pickedCards[id];
 
 
 
+
 });
 
 
@@ -639,6 +701,12 @@ delete pickedCards[id];
 
 
 
-
-
 module.exports={init};
+
+
+
+},5000);
+
+
+
+}
