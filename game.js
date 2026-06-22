@@ -20,13 +20,17 @@ let timer = 30;
 
 
 
+
+
 function randomNumbers(min,max){
 
 let arr=[];
 
-while(arr.length < 5){
 
-let n = Math.floor(Math.random()*(max-min+1))+min;
+while(arr.length<5){
+
+let n=Math.floor(Math.random()*(max-min+1))+min;
+
 
 if(!arr.includes(n)){
 
@@ -36,6 +40,7 @@ arr.push(n);
 
 }
 
+
 return arr;
 
 }
@@ -44,7 +49,10 @@ return arr;
 
 
 
+
+
 function createCard(id){
+
 
 let B=randomNumbers(1,15);
 
@@ -65,7 +73,9 @@ N[2]="FREE";
 let numbers=[];
 
 
+
 for(let i=0;i<5;i++){
+
 
 numbers.push(B[i]);
 
@@ -76,6 +86,7 @@ numbers.push(N[i]);
 numbers.push(G[i]);
 
 numbers.push(O[i]);
+
 
 }
 
@@ -97,24 +108,32 @@ numbers:numbers
 
 
 
+
 function create600Cards(){
+
 
 cards=[];
 
 
 for(let i=1;i<=600;i++){
 
+
 cards.push(createCard(i));
 
+
 }
 
 
 }
+
+
+
 
 
 
 
 function isMarked(number){
+
 
 if(number==="FREE"){
 
@@ -123,7 +142,9 @@ return true;
 }
 
 
+
 return calledNumbers.includes(number);
+
 
 }
 function checkWinner(card){
@@ -132,35 +153,51 @@ function checkWinner(card){
 let board=[];
 
 
+
 for(let r=0;r<5;r++){
+
 
 board[r]=[];
 
+
+
 for(let c=0;c<5;c++){
+
 
 board[r][c]=card.numbers[r*5+c];
 
-}
 
 }
 
 
+}
 
-// ROWS
+
+
+
+
+// ROW
 
 for(let r=0;r<5;r++){
 
+
 let win=true;
+
 
 for(let c=0;c<5;c++){
 
+
 if(!isMarked(board[r][c])){
+
 
 win=false;
 
-}
 
 }
+
+
+}
+
 
 if(win){
 
@@ -168,27 +205,36 @@ return true;
 
 }
 
+
 }
 
 
 
 
 
-// COLUMNS
+
+// COLUMN
 
 for(let c=0;c<5;c++){
 
+
 let win=true;
+
 
 for(let r=0;r<5;r++){
 
+
 if(!isMarked(board[r][c])){
+
 
 win=false;
 
-}
 
 }
+
+
+}
+
 
 if(win){
 
@@ -196,26 +242,34 @@ return true;
 
 }
 
+
 }
 
 
 
 
 
-// DIAGONAL LEFT
+
+
+// DIAGONAL 1
 
 let win=true;
 
 
 for(let i=0;i<5;i++){
 
+
 if(!isMarked(board[i][i])){
+
 
 win=false;
 
-}
 
 }
+
+
+}
+
 
 
 if(win){
@@ -228,20 +282,27 @@ return true;
 
 
 
-// DIAGONAL RIGHT
+
+
+// DIAGONAL 2
 
 win=true;
 
 
 for(let i=0;i<5;i++){
 
+
 if(!isMarked(board[i][4-i])){
+
 
 win=false;
 
-}
 
 }
+
+
+}
+
 
 
 if(win){
@@ -263,7 +324,9 @@ return false;
 
 
 
+
 function startCountdown(){
+
 
 
 if(countInterval){
@@ -273,7 +336,13 @@ clearInterval(countInterval);
 }
 
 
+
 timer=30;
+
+
+
+io.emit("clearGame");
+
 
 
 countInterval=setInterval(()=>{
@@ -286,21 +355,28 @@ countdown:timer
 });
 
 
+
 timer--;
 
 
+
 if(timer<0){
+
 
 clearInterval(countInterval);
 
 countInterval=null;
 
+
 startGame();
+
 
 }
 
 
+
 },1000);
+
 
 
 }
@@ -309,7 +385,9 @@ function startGame(){
 
 if(Object.keys(pickedCards).length < 2){
 
+
 return;
+
 
 }
 
@@ -324,9 +402,12 @@ calledNumbers=[];
 pool=[];
 
 
+
 for(let i=1;i<=75;i++){
 
+
 pool.push(i);
+
 
 }
 
@@ -340,13 +421,19 @@ io.emit("gameStart");
 gameInterval=setInterval(()=>{
 
 
+
 if(pool.length===0){
+
 
 endGame();
 
+
 return;
 
+
 }
+
+
 
 
 
@@ -366,11 +453,15 @@ calledNumbers.push(number);
 
 io.emit("number",{
 
+
 number:number,
+
 
 called:calledNumbers
 
+
 });
+
 
 
 
@@ -381,7 +472,9 @@ for(let id in pickedCards){
 
 
 let card=cards.find(
+
 c=>c.id==id
+
 );
 
 
@@ -389,17 +482,21 @@ c=>c.id==id
 if(card && checkWinner(card)){
 
 
+
 io.emit("winner",{
+
 
 message:"GOOD BINGO",
 
 cartela:card.id
+
 
 });
 
 
 
 endGame();
+
 
 return;
 
@@ -417,6 +514,7 @@ return;
 
 
 }
+
 
 
 
@@ -447,6 +545,7 @@ gameInterval=null;
 countInterval=null;
 
 
+
 gameStarted=false;
 
 
@@ -458,10 +557,14 @@ io.emit("gameEnd");
 setTimeout(()=>{
 
 
+
+// clear all old game
+
 calledNumbers=[];
 
 
 pickedCards={};
+
 
 
 create600Cards();
@@ -471,7 +574,14 @@ create600Cards();
 io.emit("clearGame");
 
 
+
 io.emit("cardsList",cards);
+
+
+
+// new game countdown
+
+startCountdown();
 
 
 
@@ -483,11 +593,12 @@ io.emit("cardsList",cards);
 function init(server){
 
 
-io = new Server(server);
+io=new Server(server);
 
 
 
 create600Cards();
+
 
 
 
@@ -512,8 +623,32 @@ called:calledNumbers
 socket.on("chooseCard",(data)=>{
 
 
+
+// block picking during game
+
+if(gameStarted){
+
+
+socket.emit("cardTaken",{
+
+message:"WAITING FOR NEXT GAME"
+
+});
+
+
+return;
+
+
+}
+
+
+
+
+
 let card=cards.find(
+
 c=>c.id==data.cardId
+
 );
 
 
@@ -527,19 +662,28 @@ return;
 
 
 
+
+// stop duplicate cartela
+
 if(
 pickedCards[data.cardId] &&
-pickedCards[data.cardId] !== socket.id
+pickedCards[data.cardId]!==socket.id
 ){
 
 
-socket.emit("cardTaken");
+socket.emit("cardTaken",{
+
+message:"CARTELA ALREADY PICKED"
+
+});
 
 
 return;
 
 
 }
+
+
 
 
 
@@ -551,11 +695,17 @@ socket.emit("cardSelected",card);
 
 
 
+
+
 io.emit("pickedCount",{
+
 
 count:Object.keys(pickedCards).length
 
+
 });
+
+
 
 
 
@@ -575,6 +725,7 @@ startCountdown();
 
 
 
+
 });
 
 
@@ -586,7 +737,9 @@ startCountdown();
 socket.on("disconnect",()=>{
 
 
+
 for(let id in pickedCards){
+
 
 
 if(pickedCards[id]===socket.id){
@@ -598,7 +751,9 @@ delete pickedCards[id];
 }
 
 
+
 }
+
 
 
 });
@@ -607,11 +762,13 @@ delete pickedCards[id];
 
 
 
+
 });
 
 
 
 }
+
 
 
 
